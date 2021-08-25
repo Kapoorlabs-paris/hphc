@@ -10,7 +10,7 @@ from __future__ import print_function, unicode_literals, absolute_import, divisi
 #import matplotlib.pyplot as plt
 import numpy as np
 import collections
-
+from skimage.segmentation import find_boundaries
 import warnings
 from skimage.filters import gaussian
 from six.moves import reduce
@@ -146,16 +146,32 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                     
             LabelHairimage = label(Hairimage)
             waterproperties = measure.regionprops(LabelHairimage, LabelHairimage)
-            indices = [prop.centroid for prop in waterproperties]
-            vor = Voronoi(indices)
-            fig = voronoi_plot_2d(vor)
+            Coordinates = [prop.centroid for prop in waterproperties]
+            Coordinates = sorted(Coordinates , key=lambda k: [k[1], k[0]])
+            Coordinates.append((0,0))
+            Coordinates = np.asarray(Coordinates)
+
+            coordinates_int = np.round(Coordinates).astype(int)
+            markers_raw = np.zeros_like(Maskimage)  
+            markers_raw[tuple(coordinates_int.T)] = 1 + np.arange(len(Coordinates))
+
+            markers = morphology.dilation(markers_raw, morphology.disk(2))
+            watershedImage = watershed(Maskimage, markers)
+            watershedImage = Integer_to_border(watershedImage)
+            plt.imshow(watershedImage)
             plt.show()
-            plt.title('Voronoi plot for hairs')
             imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
             imwrite(SavedirHair + Name + '.tif', Hairimage.astype('uint16'))
+            imwrite(SavedirHair + Name + 'vor' + '.tif', watershedImage.astype('uint16'))
 
           
+def Integer_to_border(Label):
 
+        BoundaryLabel =  find_boundaries(SmallLabel, mode='outer')
+           
+        Binary = BoundaryLabel > 0
+        
+        return Binary
 def Segment(image, model, axis, n_tiles, show_after =  1 ):
     
             Segmented = model.predict(image, axis, n_tiles = n_tiles)
@@ -195,10 +211,11 @@ def BadSegmentation(maximage, min_size = 20, sigma = 5):
                     maximage = maximage > thresh
                     maximage = invert(maximage)
                     maximage = label(maximage)
-
                     maximage = remove_small_objects(maximage, min_size)
+                    
                     maximage = maximage > 0
-    
+                    maximage = fill_label_holes(maximage) 
+                    return maximage     
 
         
 
