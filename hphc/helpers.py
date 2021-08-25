@@ -10,6 +10,7 @@ from __future__ import print_function, unicode_literals, absolute_import, divisi
 #import matplotlib.pyplot as plt
 import numpy as np
 import collections
+from scipy.ndimage import distance_transform_edt
 from skimage.segmentation import find_boundaries
 import warnings
 from skimage.filters import gaussian
@@ -40,7 +41,7 @@ from skimage import measure
 from skimage.filters import sobel
 from skimage.measure import label
 from scipy import spatial
-
+from shapely.geometry import MultiPoint, Point, Polygon
 from csbdeep.data import  create_patches,create_patches_reduced_target, RawData
 from skimage import transform
 
@@ -100,6 +101,85 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
     return out
 
 
+def voronoi_finite_polygons_2d(vor, radius=None):
+    """
+    Reconstruct infinite voronoi regions in a 2D diagram to finite
+    regions.
+    Parameters
+    ----------
+    vor : Voronoi
+        Input diagram
+    radius : float, optional
+        Distance to 'points at infinity'.
+    Returns
+    -------
+    regions : list of tuples
+        Indices of vertices in each revised Voronoi regions.
+    vertices : list of tuples
+        Coordinates for revised Voronoi vertices. Same as coordinates
+        of input vertices, with 'points at infinity' appended to the
+        end.
+    """
+
+    if vor.points.shape[1] != 2:
+        raise ValueError("Requires 2D input")
+
+    new_regions = []
+    new_vertices = vor.vertices.tolist()
+
+    center = vor.points.mean(axis=0)
+    if radius is None:
+        radius = vor.points.ptp().max()*2
+
+    # Construct a map containing all ridges for a given point
+    all_ridges = {}
+    for (p1, p2), (v1, v2) in zip(vor.ridge_points, vor.ridge_vertices):
+        all_ridges.setdefault(p1, []).append((p2, v1, v2))
+        all_ridges.setdefault(p2, []).append((p1, v1, v2))
+
+    # Reconstruct infinite regions
+    for p1, region in enumerate(vor.point_region):
+        vertices = vor.regions[region]
+
+        if all(v >= 0 for v in vertices):
+            # finite region
+            new_regions.append(vertices)
+            continue
+
+        # reconstruct a non-finite region
+        ridges = all_ridges[p1]
+        new_region = [v for v in vertices if v >= 0]
+
+        for p2, v1, v2 in ridges:
+            if v2 < 0:
+                v1, v2 = v2, v1
+            if v1 >= 0:
+                # finite ridge: already in the region
+                continue
+
+            # Compute the missing endpoint of an infinite ridge
+
+            t = vor.points[p2] - vor.points[p1] # tangent
+            t /= np.linalg.norm(t)
+            n = np.array([-t[1], t[0]])  # normal
+
+            midpoint = vor.points[[p1, p2]].mean(axis=0)
+            direction = np.sign(np.dot(midpoint - center, n)) * n
+            far_point = vor.vertices[v2] + direction * radius
+
+            new_region.append(len(new_vertices))
+            new_vertices.append(far_point.tolist())
+
+        # sort region counterclockwise
+        vs = np.asarray([new_vertices[v] for v in new_region])
+        c = vs.mean(axis=0)
+        angles = np.arctan2(vs[:,1] - c[1], vs[:,0] - c[0])
+        new_region = np.array(new_region)[np.argsort(angles)]
+
+        # finish
+        new_regions.append(new_region.tolist())
+
+    return new_regions, np.asarray(new_vertices)
 
             
 
@@ -137,7 +217,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             Hairimage[indices] = 0
             
             Maskimagecopy = Maskimage.copy()
-            maskindices = np.where(Maskimagecopy > 0)
+            maskindices = np.where(Maskimagecopy == 0)
             Hairimage[maskindices] = 0
             
             if count%show_after == 0:
@@ -147,27 +227,171 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             LabelHairimage = label(Hairimage)
             waterproperties = measure.regionprops(LabelHairimage, LabelHairimage)
             Coordinates = [prop.centroid for prop in waterproperties]
-            Coordinates = sorted(Coordinates , key=lambda k: [k[1], k[0]])
-            Coordinates.append((0,0))
+            Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
             Coordinates = np.asarray(Coordinates)
-
-            coordinates_int = np.round(Coordinates).astype(int)
-            markers_raw = np.zeros_like(Maskimage)  
-            markers_raw[tuple(coordinates_int.T)] = 1 + np.arange(len(Coordinates))
-
-            markers = morphology.dilation(markers_raw, morphology.disk(2))
-            watershedImage = watershed(Maskimage, markers)
-            watershedImage = Integer_to_border(watershedImage)
-            plt.imshow(watershedImage)
+            
+  
+            
+            vor = Voronoi(Coordinates)
+            regions, vertices = voronoi_finite_polygons_2d(vor)
+            pts = MultiPoint([Point(i) for i in Coordinates])
+            mask = pts.convex_hull
+            new_vertices = []
+            for region in regions:
+                polygon = vertices[region]
+                shape = list(polygon.shape)
+                shape[0] += 1
+                p = Polygon(np.append(polygon, polygon[0]).reshape(*shape)).intersection(mask)
+                poly = np.array(list(zip(p.boundary.coords.xy[0][:-1], p.boundary.coords.xy[1][:-1])))
+                new_vertices.append(poly)
+                plt.fill(*zip(*poly), alpha=0.4)
+            plt.title("Colored Voronois")
             plt.show()
+            
+            
             imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
             imwrite(SavedirHair + Name + '.tif', Hairimage.astype('uint16'))
-            imwrite(SavedirHair + Name + 'vor' + '.tif', watershedImage.astype('uint16'))
+        
+def swap(*line_list):
+    """
+    Example
+    -------
+    line = plot(linspace(0, 2, 10), rand(10))
+    swap(line)
+    """
+    for lines in line_list:
+        try:
+            iter(lines)
+        except:
+            lines = [lines]
 
-          
+        for line in lines:
+            xdata, ydata = line.get_xdata(), line.get_ydata()
+            line.set_xdata(ydata)
+            line.set_ydata(xdata)
+            line.axes.autoscale_view()        
+def voronoi(points,shape=(500,500)):
+    depthmap = np.ones(shape,np.float)*1e308
+    colormap = np.zeros(shape,np.int)
+
+    def hypot(X,Y):
+        return (X-x)**2 + (Y-y)**2
+
+    for i,(x,y) in enumerate(points):
+        paraboloid = np.fromfunction(hypot,shape)
+        colormap = np.where(paraboloid < depthmap,i+1,colormap)
+        depthmap = np.where(paraboloid <
+depthmap,paraboloid,depthmap)
+
+    for (x,y) in points:
+        colormap[x-1:x+2,y-1:y+2] = 0
+
+    return colormap
+
+def draw_map(colormap):
+    shape = colormap.shape
+
+    palette = np.array([
+            0x000000FF,
+            0xFF0000FF,
+            0x00FF00FF,
+            0xFFFF00FF,
+            0x0000FFFF,
+            0xFF00FFFF,
+            0x00FFFFFF,
+            0xFFFFFFFF,
+            ])
+
+    colormap = np.transpose(colormap)
+    pixels = np.empty(colormap.shape+(4,),np.int8)
+
+    pixels[:,:,3] = palette[colormap] & 0xFF
+    pixels[:,:,2] = (palette[colormap]>>8) & 0xFF
+    pixels[:,:,1] = (palette[colormap]>>16) & 0xFF
+    pixels[:,:,0] = (palette[colormap]>>24) & 0xFF
+
+    return Image
+def expand_labels(label_image, distance=1):
+    """Expand labels in label image by ``distance`` pixels without overlapping.
+    Given a label image, ``expand_labels`` grows label regions (connected components)
+    outwards by up to ``distance`` pixels without overflowing into neighboring regions.
+    More specifically, each background pixel that is within Euclidean distance
+    of <= ``distance`` pixels of a connected component is assigned the label of that
+    connected component.
+    Where multiple connected components are within ``distance`` pixels of a background
+    pixel, the label value of the closest connected component will be assigned (see
+    Notes for the case of multiple labels at equal distance).
+    Parameters
+    ----------
+    label_image : ndarray of dtype int
+        label image
+    distance : float
+        Euclidean distance in pixels by which to grow the labels. Default is one.
+    Returns
+    -------
+    enlarged_labels : ndarray of dtype int
+        Labeled array, where all connected regions have been enlarged
+    Notes
+    -----
+    Where labels are spaced more than ``distance`` pixels are apart, this is
+    equivalent to a morphological dilation with a disc or hyperball of radius ``distance``.
+    However, in contrast to a morphological dilation, ``expand_labels`` will
+    not expand a label region into a neighboring region.  
+    This implementation of ``expand_labels`` is derived from CellProfiler [1]_, where
+    it is known as module "IdentifySecondaryObjects (Distance-N)" [2]_.
+    There is an important edge case when a pixel has the same distance to
+    multiple regions, as it is not defined which region expands into that
+    space. Here, the exact behavior depends on the upstream implementation
+    of ``scipy.ndimage.distance_transform_edt``.
+    See Also
+    --------
+    :func:`skimage.measure.label`, :func:`skimage.segmentation.watershed`, :func:`skimage.morphology.dilation`
+    References
+    ----------
+    .. [1] https://cellprofiler.org
+    .. [2] https://github.com/CellProfiler/CellProfiler/blob/082930ea95add7b72243a4fa3d39ae5145995e9c/cellprofiler/modules/identifysecondaryobjects.py#L559
+    Examples
+    --------
+    >>> labels = np.array([0, 1, 0, 0, 0, 0, 2])
+    >>> expand_labels(labels, distance=1)
+    array([1, 1, 1, 0, 0, 2, 2])
+    Labels will not overwrite each other:
+    >>> expand_labels(labels, distance=3)
+    array([1, 1, 1, 1, 2, 2, 2])
+    In case of ties, behavior is undefined, but currently resolves to the
+    label closest to ``(0,) * ndim`` in lexicographical order.
+    >>> labels_tied = np.array([0, 1, 0, 2, 0])
+    >>> expand_labels(labels_tied, 1)
+    array([1, 1, 1, 2, 2])
+    >>> labels2d = np.array(
+    ...     [[0, 1, 0, 0],
+    ...      [2, 0, 0, 0],
+    ...      [0, 3, 0, 0]]
+    ... )
+    >>> expand_labels(labels2d, 1)
+    array([[2, 1, 1, 0],
+           [2, 2, 0, 0],
+           [2, 3, 3, 0]])
+    """
+
+    distances, nearest_label_coords = distance_transform_edt(
+        label_image == 0, return_indices=True
+    )
+    labels_out = np.zeros_like(label_image)
+    dilate_mask = distances <= distance
+    # build the coordinates to find nearest labels,
+    # in contrast to [1] this implementation supports label arrays
+    # of any dimension
+    masked_nearest_label_coords = [
+        dimension_indices[dilate_mask]
+        for dimension_indices in nearest_label_coords
+    ]
+    nearest_labels = label_image[tuple(masked_nearest_label_coords)]
+    labels_out[dilate_mask] = nearest_labels
+    return labels_out          
 def Integer_to_border(Label):
 
-        BoundaryLabel =  find_boundaries(SmallLabel, mode='outer')
+        BoundaryLabel =  find_boundaries(Label, mode='outer')
            
         Binary = BoundaryLabel > 0
         
@@ -209,10 +433,8 @@ def BadSegmentation(maximage, min_size = 20, sigma = 5):
                     maximage = gaussian_filter(maximage, sigma = sigma)
                     thresh = threshold_otsu(maximage) 
                     maximage = maximage > thresh
-                    maximage = invert(maximage)
                     maximage = label(maximage)
                     maximage = remove_small_objects(maximage, min_size)
-                    
                     maximage = maximage > 0
                     maximage = fill_label_holes(maximage) 
                     return maximage     
