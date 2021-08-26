@@ -25,6 +25,7 @@ from scipy.ndimage.morphology import binary_fill_holes
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from skimage.segmentation import watershed
 import os
+from skimage.segmentation import find_boundaries
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import difflib
 import pandas as pd
@@ -244,7 +245,6 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             regions, vertices, vol = voronoi_finite_polygons_2d(vor)
             pts = MultiPoint([Point(i) for i in Coordinates])
             mask = pts.convex_hull
-            new_vertices = []
             labelindex = 1 
             for i in range(len(regions)):
                 region = regions[i]
@@ -259,16 +259,25 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
 
                         smalllabel = polygons_to_label_coord(polyY, polyX, maximage.shape, labelindex)
                         Labelimage = Labelimage + smalllabel
-                        new_vertices.append(poly)
                         labelindex = labelindex + 1
                         
             plt.imshow(Labelimage)
             plt.show()
-            plt.title('Voronoi plot')
+            Binaryimage = Integer_to_border(Labelimage)
+            imwrite(SavedirHair + Name + 'BinaryVor' + '.tif', Binaryimage.astype('uint8'))
             imwrite(SavedirHair + Name + 'Vor' + '.tif', Labelimage.astype('uint16'))
             imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
             imwrite(SavedirHair + Name + '.tif', Hairimage.astype('uint16'))
             return vor
+
+def Integer_to_border(Label):
+
+        BoundaryLabel =  find_boundaries(Label, mode='outer')
+           
+        Binary = BoundaryLabel > 0
+        
+        return Binary
+
 
 def polygons_to_label_coord(Y, X, shape, labelindex):
     """renders polygons to image of given shape
