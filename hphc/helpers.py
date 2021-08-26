@@ -261,9 +261,9 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                         Labelimage = Labelimage + smalllabel
                         labelindex = labelindex + 1
                         
-            plt.imshow(Labelimage)
-            plt.show()
-            Binaryimage = Integer_to_border(Labelimage)
+            
+            Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
+            doubleplot(Labelimage, Binaryimage, "Label Voronoi", "Binary Voronoi")
             imwrite(SavedirHair + Name + 'BinaryVor' + '.tif', Binaryimage.astype('uint8'))
             imwrite(SavedirHair + Name + 'Vor' + '.tif', Labelimage.astype('uint16'))
             imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
