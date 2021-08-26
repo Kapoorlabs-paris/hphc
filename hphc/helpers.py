@@ -28,6 +28,7 @@ import os
 import difflib
 import pandas as pd
 import glob
+from scipy.spatial import ConvexHull
 from tifffile import imread, imwrite
 from scipy import ndimage as ndi
 from pathlib import Path
@@ -44,6 +45,8 @@ from scipy import spatial
 from shapely.geometry import MultiPoint, Point, Polygon
 from csbdeep.data import  create_patches,create_patches_reduced_target, RawData
 from skimage import transform
+
+
 
 def _fill_label_holes(lbl_img, **kwargs):
     lbl_img_filled = np.zeros_like(lbl_img)
@@ -126,7 +129,7 @@ def voronoi_finite_polygons_2d(vor, radius=None):
 
     new_regions = []
     new_vertices = vor.vertices.tolist()
-
+    vol = np.zeros(vor.npoints)
     center = vor.points.mean(axis=0)
     if radius is None:
         radius = vor.points.ptp().max()*2
@@ -140,7 +143,10 @@ def voronoi_finite_polygons_2d(vor, radius=None):
     # Reconstruct infinite regions
     for p1, region in enumerate(vor.point_region):
         vertices = vor.regions[region]
-
+        if -1 in vertices: # some regions can be opened
+            vol[p1] = np.inf
+        else:
+            vol[p1] = ConvexHull(vor.vertices[vertices]).volume
         if all(v >= 0 for v in vertices):
             # finite region
             new_regions.append(vertices)
@@ -179,9 +185,9 @@ def voronoi_finite_polygons_2d(vor, radius=None):
         # finish
         new_regions.append(new_region.tolist())
 
-    return new_regions, np.asarray(new_vertices)
+    return new_regions, np.asarray(new_vertices), vol
 
-            
+          
 
 def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis,min_size = 20, sigma = 5, show_after = 1):
 
@@ -233,18 +239,21 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
   
             
             vor = Voronoi(Coordinates)
-            regions, vertices = voronoi_finite_polygons_2d(vor)
+            regions, vertices, vol = voronoi_finite_polygons_2d(vor)
             pts = MultiPoint([Point(i) for i in Coordinates])
             mask = pts.convex_hull
             new_vertices = []
-            for region in regions:
-                polygon = vertices[region]
-                shape = list(polygon.shape)
-                shape[0] += 1
-                p = Polygon(np.append(polygon, polygon[0]).reshape(*shape)).intersection(mask)
-                poly = np.array(list(zip(p.boundary.coords.xy[0][:-1], p.boundary.coords.xy[1][:-1])))
-                new_vertices.append(poly)
-                plt.fill(*zip(*poly), alpha=0.4)
+            for i in range(len(regions)):
+                region = regions[i]
+                volume = vol[i]
+                if volume is not np.inf:
+                        polygon = vertices[region]
+                        shape = list(polygon.shape)
+                        shape[0] += 1
+                        p = Polygon(np.append(polygon, polygon[0]).reshape(*shape)).intersection(mask)
+                        poly = np.array(list(zip(p.boundary.coords.xy[0][:-1], p.boundary.coords.xy[1][:-1])))
+                        new_vertices.append(poly)
+                        plt.fill(*zip(*poly), alpha=0.4)
             plt.title("Colored Voronois")
             plt.show()
             
