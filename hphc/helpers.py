@@ -25,6 +25,7 @@ from scipy.ndimage.morphology import binary_fill_holes
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from skimage.segmentation import watershed
 import os
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import difflib
 import pandas as pd
 import glob
@@ -42,6 +43,7 @@ from skimage import measure
 from skimage.filters import sobel
 from skimage.measure import label
 from scipy import spatial
+from skimage.draw import polygon
 from shapely.geometry import MultiPoint, Point, Polygon
 from csbdeep.data import  create_patches,create_patches_reduced_target, RawData
 from skimage import transform
@@ -217,7 +219,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             
             Hairimage = Segment(maximage, modelHair, axis, n_tiles, show_after =  show_after)
             Veinimage = Segment(avgimage, modelVein, axis, n_tiles, show_after =  show_after)
-          
+            Labelimage = np.zeros(Hairimage.shape)
             Veinimagecopy = Veinimage.copy()
             indices = np.where(Veinimagecopy > 0)
             Hairimage[indices] = 0
@@ -243,6 +245,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             pts = MultiPoint([Point(i) for i in Coordinates])
             mask = pts.convex_hull
             new_vertices = []
+            labelindex = 1 
             for i in range(len(regions)):
                 region = regions[i]
                 volume = vol[i]
@@ -251,16 +254,32 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                         shape = list(polygon.shape)
                         shape[0] += 1
                         p = Polygon(np.append(polygon, polygon[0]).reshape(*shape)).intersection(mask)
-                        poly = np.array(list(zip(p.boundary.coords.xy[0][:-1], p.boundary.coords.xy[1][:-1])))
+                        polyY = np.array(list(zip(p.boundary.coords.xy[0][:-1])))
+                        polyX = np.array(list(zip(p.boundary.coords.xy[1][:-1])))
+
+                        smalllabel = polygons_to_label_coord(polyY, polyX, maximage.shape, labelindex)
+                        Labelimage = Labelimage + smalllabel
                         new_vertices.append(poly)
-                        plt.fill(*zip(*poly), alpha=0.4)
-            plt.title("Colored Voronois")
+                        labelindex = labelindex + 1
+                        
+            plt.imshow(Labelimage)
             plt.show()
-            
-            
+            plt.title('Voronoi plot')
+            imwrite(SavedirHair + Name + 'Vor' + '.tif', Labelimage.astype('uint16'))
             imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
             imwrite(SavedirHair + Name + '.tif', Hairimage.astype('uint16'))
-        
+            return vor
+
+def polygons_to_label_coord(Y, X, shape, labelindex):
+    """renders polygons to image of given shape
+    """
+
+    lbl = np.zeros(shape,np.int32)
+    rr,cc = polygon(Y, X)
+    lbl[rr,cc] = labelindex
+
+    return lbl
+
 def swap(*line_list):
     """
     Example
