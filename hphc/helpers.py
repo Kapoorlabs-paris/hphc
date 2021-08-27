@@ -30,6 +30,9 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import difflib
 import pandas as pd
 import glob
+from scipy import ndimage as ndi
+
+from skimage.segmentation import watershed
 from scipy.spatial import ConvexHull
 from tifffile import imread, imwrite
 from scipy import ndimage as ndi
@@ -105,9 +108,35 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
     out[too_big_mask] = 0
 
     return out
+def intersection(lst1, lst2):
+    print('list',lst1)
+    print('list2', lst2)
+    lst3 = set([tuple(sorted(ele)) for ele in lst1]) & set([tuple(sorted(ele)) for ele in lst2])
+  
+    return lst3
 
 
-def voronoi_finite_polygons_2d(vor, radius=None):
+def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices):
+
+    #distance = ndi.distance_transform_edt(np.logical_not(image))
+
+    Mask = np.logical_xor(Mask > 0, VeinMask > 0)
+    coordinates_int = np.round(Coordinates).astype(int)
+    markers_raw = np.zeros(image.shape)  
+    markers_raw[tuple(coordinates_int.T)] = 1 + np.arange(len(Coordinates))
+
+    markers = morphology.dilation(markers_raw, morphology.disk(2))
+  
+    Labelimage = watershed(image, markers)
+    Labelimage = Remove_label(Labelimage, indices)
+    Labelimage = Remove_label(Labelimage, maskindices)
+    Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
+    binary = Integer_to_border(Labelimage.copy().astype('uint16'))
+     
+    return Labelimage, binary, markers
+    
+
+def voronoi_finite_polygons_2d(vor, indices, maskindices, radius=None):
     """
     Reconstruct infinite voronoi regions in a 2D diagram to finite
     regions.
@@ -146,6 +175,9 @@ def voronoi_finite_polygons_2d(vor, radius=None):
     # Reconstruct infinite regions
     for p1, region in enumerate(vor.point_region):
         vertices = vor.regions[region]
+        
+
+
         if -1 in vertices: # some regions can be opened
             vol[p1] = np.inf
         else:
@@ -190,9 +222,27 @@ def voronoi_finite_polygons_2d(vor, radius=None):
 
     return new_regions, np.asarray(new_vertices), vol
 
-          
+def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
+    
+    out = ar.copy()
+    ccs = out
 
-def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis,min_size = 20, sigma = 5, show_after = 1):
+    try:
+        component_sizes = np.bincount(ccs.ravel())
+    except ValueError:
+        raise ValueError("Negative value labels are not supported. Try "
+                         "relabeling the input with `scipy.ndimage.label` or "
+                         "`skimage.morphology.label`.")
+
+
+
+    too_big = component_sizes > max_size
+    too_big_mask = too_big[ccs]
+    out[too_big_mask] = 0
+
+    return out          
+
+def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis, DoVoronoi = False, DoWatershed = True,min_size = 20, sigma = 5, show_after = 1):
 
     count = 0
     Path(SavedirMax).mkdir(exist_ok=True)
@@ -228,6 +278,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             Maskimagecopy = Maskimage.copy()
             maskindices = np.where(Maskimagecopy == 0)
             Hairimage[maskindices] = 0
+           
             
             if count%show_after == 0:
                     doubleplot(Veinimage, Hairimage, "Vein", "Hair")
@@ -237,38 +288,55 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             waterproperties = measure.regionprops(LabelHairimage, LabelHairimage)
             Coordinates = [prop.centroid for prop in waterproperties]
             Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
+            Coordinates.append((0,0))
             Coordinates = np.asarray(Coordinates)
             
-  
-            
-            vor = Voronoi(Coordinates)
-            regions, vertices, vol = voronoi_finite_polygons_2d(vor)
-            pts = MultiPoint([Point(i) for i in Coordinates])
-            mask = pts.convex_hull
-            labelindex = 1 
-            for i in range(len(regions)):
-                region = regions[i]
-                volume = vol[i]
-                if volume is not np.inf:
-                        polygon = vertices[region]
-                        shape = list(polygon.shape)
-                        shape[0] += 1
-                        p = Polygon(np.append(polygon, polygon[0]).reshape(*shape)).intersection(mask)
-                        polyY = np.array(list(zip(p.boundary.coords.xy[0][:-1])))
-                        polyX = np.array(list(zip(p.boundary.coords.xy[1][:-1])))
+            if DoWatershed:
 
-                        smalllabel = polygons_to_label_coord(polyY, polyX, maximage.shape, labelindex)
-                        Labelimage = Labelimage + smalllabel
-                        labelindex = labelindex + 1
-                        
+               Hairimage[np.where(Hairimage > 0)] = 127
+               Maskimage[np.where(Maskimage > 0)] = 255
+               Hairimage = np.logical_xor(Maskimage, Hairimage)
+               Hairimage = np.logical_xor(Hairimage , Veinimage)
+
+               distlabel, distbinary, markers = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
+               doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
+               imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
+               imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
+              
+               imwrite(SavedirHair + Name + 'Markers' + '.tif', markers.astype('uint16'))
+             
+            if DoVoronoi:
+                  vor = Voronoi(Coordinates)
+                  regions, vertices, vol = voronoi_finite_polygons_2d(vor, indices, maskindices)
+                  pts = MultiPoint([Point(i) for i in Coordinates])
+                  mask = pts.convex_hull
+                  labelindex = 1 
+                  for i in range(len(regions)):
+                      region = regions[i]
+                      volume = vol[i]
+                      if volume is not np.inf:
+                              polygon = vertices[region]
+                              shape = list(polygon.shape)
+                              shape[0] += 1
+                              p = Polygon(np.append(polygon, polygon[0]).reshape(*shape)).intersection(mask)
+                              polyY = np.array(list(zip(p.boundary.coords.xy[0][:-1])))
+                              polyX = np.array(list(zip(p.boundary.coords.xy[1][:-1])))
+
+                              smalllabel = polygons_to_label_coord(polyY, polyX, maximage.shape, labelindex)
+                              Labelimage = Labelimage + smalllabel
+                              labelindex = labelindex + 1
+                              
+                  Labelimage = Remove_label(Labelimage, indices)
+                  Labelimage = Remove_label(Labelimage, maskindices)
+                  Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
+                  doubleplot(Labelimage, Binaryimage, "Label Voronoi", "Binary Voronoi")
+                  imwrite(SavedirHair + Name + 'BinaryVor' + '.tif', Binaryimage.astype('uint8'))
+                  imwrite(SavedirHair + Name + 'Vor' + '.tif', Labelimage.astype('uint16'))
+
             
-            Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
-            doubleplot(Labelimage, Binaryimage, "Label Voronoi", "Binary Voronoi")
-            imwrite(SavedirHair + Name + 'BinaryVor' + '.tif', Binaryimage.astype('uint8'))
-            imwrite(SavedirHair + Name + 'Vor' + '.tif', Labelimage.astype('uint16'))
             imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
             imwrite(SavedirHair + Name + '.tif', Hairimage.astype('uint16'))
-            return vor
+            
 
 def Integer_to_border(Label):
 
@@ -278,6 +346,11 @@ def Integer_to_border(Label):
         
         return Binary
 
+
+def Remove_label(Label, indices):
+  
+    Label[indices] = 0 
+    return Label    
 
 def polygons_to_label_coord(Y, X, shape, labelindex):
     """renders polygons to image of given shape
