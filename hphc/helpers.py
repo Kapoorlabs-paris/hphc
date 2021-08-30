@@ -393,8 +393,8 @@ def RelabelArea(Label, SavedirHair, Name,  scale):
      
      mean_area = df['Area'].mean()
      max_area = df['Area'].max()
-     max_area_index = df.index[df['Area'] == max_area]
-     max_label = df.at[max_area_index, 'Label_ID']
+     dllabels = df['Label_ID'] 
+     max_label = dflabels[df['Area'] == max_area]
      
      print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
      
