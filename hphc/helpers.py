@@ -234,15 +234,24 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
                          "relabeling the input with `scipy.ndimage.label` or "
                          "`skimage.morphology.label`.")
 
+<<<<<<< HEAD
 
 
+=======
+
+
+>>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
     too_big = component_sizes > max_size
     too_big_mask = too_big[ccs]
     out[too_big_mask] = 0
 
     return out          
 
+<<<<<<< HEAD
 def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis, DoVoronoi = False, DoWatershed = True,min_size = 20, sigma = 5, show_after = 1, scales = 10, maxsize = 10000):
+=======
+def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis, DoVoronoi = False, DoWatershed = True,min_size = 20, sigma = 5, show_after = 1):
+>>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
 
     count = 0
     Path(SavedirMax).mkdir(exist_ok=True)
@@ -267,7 +276,10 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             
             Hairimage = Segment(maximage, modelHair, axis, n_tiles, show_after =  show_after)
             Veinimage = Segment(avgimage, modelVein, axis, n_tiles, show_after =  show_after)
+<<<<<<< HEAD
             BinaryVeinimage = Integer_to_border(Veinimage.astype('uint16'))
+=======
+>>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
             Labelimage = np.zeros(Hairimage.shape)
             Veinimagecopy = Veinimage.copy()
             indices = np.where(Veinimagecopy > 0)
@@ -297,12 +309,19 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                Hairimage = np.logical_xor(Hairimage , Veinimage)
 
                distlabel, distbinary, markers = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
+<<<<<<< HEAD
                distlabel = remove_big_objects(distlabel, maxsize)
                distlabel = RelabelArea(distlabel, scales)
                if count%show_after == 0:
                    doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
                imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
                imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
+=======
+               doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
+               imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
+               imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
+              
+>>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
                imwrite(SavedirHair + Name + 'Markers' + '.tif', markers.astype('uint16'))
              
             if DoVoronoi:
@@ -328,11 +347,16 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                               
                   Labelimage = Remove_label(Labelimage, indices)
                   Labelimage = Remove_label(Labelimage, maskindices)
+<<<<<<< HEAD
                   Labelimage = remove_big_objects(Labelimage.astype('uint16'), maxsize)
                   Labelimage = RelabelArea(Labelimage.astype('uint16'), scales)
                   Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
                   if count%show_after == 0:
                       doubleplot(Labelimage, Binaryimage, "Label Voronoi", "Binary Voronoi")
+=======
+                  Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
+                  doubleplot(Labelimage, Binaryimage, "Label Voronoi", "Binary Voronoi")
+>>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
                   imwrite(SavedirHair + Name + 'BinaryVor' + '.tif', Binaryimage.astype('uint8'))
                   imwrite(SavedirHair + Name + 'Vor' + '.tif', Labelimage.astype('uint16'))
 
@@ -355,6 +379,7 @@ def Remove_label(Label, indices):
     Label[indices] = 0 
     return Label    
 
+<<<<<<< HEAD
 def RelabelArea(Label, scale):
 
      regions = measure.regionprops(Label)
@@ -374,6 +399,8 @@ def RelabelArea(Label, scale):
         only_current_label_id = np.where(Label == label_id, scale_id, 0)
         Relabel = Relabel + only_current_label_id
      return Relabel   
+=======
+>>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
 def polygons_to_label_coord(Y, X, shape, labelindex):
     """renders polygons to image of given shape
     """
