@@ -234,24 +234,15 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
                          "relabeling the input with `scipy.ndimage.label` or "
                          "`skimage.morphology.label`.")
 
-<<<<<<< HEAD
-
-
-=======
-
-
->>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
     too_big = component_sizes > max_size
     too_big_mask = too_big[ccs]
     out[too_big_mask] = 0
 
     return out          
 
-<<<<<<< HEAD
+
 def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis, DoVoronoi = False, DoWatershed = True,min_size = 20, sigma = 5, show_after = 1, scales = 10, maxsize = 10000):
-=======
-def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis, DoVoronoi = False, DoWatershed = True,min_size = 20, sigma = 5, show_after = 1):
->>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
+
 
     count = 0
     Path(SavedirMax).mkdir(exist_ok=True)
@@ -261,9 +252,6 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
     for fname in filesRaw:
             count = count + 1
             
-            
-            
-           
             Name = os.path.basename(os.path.splitext(fname)[0])
             image = imread(fname)
             maximage = np.max(image, axis = 0)
@@ -276,10 +264,9 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             
             Hairimage = Segment(maximage, modelHair, axis, n_tiles, show_after =  show_after)
             Veinimage = Segment(avgimage, modelVein, axis, n_tiles, show_after =  show_after)
-<<<<<<< HEAD
+
             BinaryVeinimage = Integer_to_border(Veinimage.astype('uint16'))
-=======
->>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
+
             Labelimage = np.zeros(Hairimage.shape)
             Veinimagecopy = Veinimage.copy()
             indices = np.where(Veinimagecopy > 0)
@@ -309,19 +296,13 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                Hairimage = np.logical_xor(Hairimage , Veinimage)
 
                distlabel, distbinary, markers = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
-<<<<<<< HEAD
                distlabel = remove_big_objects(distlabel, maxsize)
-               distlabel = RelabelArea(distlabel, scales)
+               distlabelrelabel = RelabelArea(distlabel, SavedirHair, Name, scales)
                if count%show_after == 0:
                    doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
                imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
                imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
-=======
-               doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
-               imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
-               imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
-              
->>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
+               imwrite(SavedirHair + Name + 'WaterRelabelArea' + '.tif', distlabelrelabel.astype('uint16'))
                imwrite(SavedirHair + Name + 'Markers' + '.tif', markers.astype('uint16'))
              
             if DoVoronoi:
@@ -347,23 +328,25 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                               
                   Labelimage = Remove_label(Labelimage, indices)
                   Labelimage = Remove_label(Labelimage, maskindices)
-<<<<<<< HEAD
+
                   Labelimage = remove_big_objects(Labelimage.astype('uint16'), maxsize)
-                  Labelimage = RelabelArea(Labelimage.astype('uint16'), scales)
+                  Labelimagerelabel = RelabelArea(Labelimage.astype('uint16'),SavedirHair, Name, scales)
                   Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
                   if count%show_after == 0:
                       doubleplot(Labelimage, Binaryimage, "Label Voronoi", "Binary Voronoi")
-=======
-                  Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
-                  doubleplot(Labelimage, Binaryimage, "Label Voronoi", "Binary Voronoi")
->>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
+
                   imwrite(SavedirHair + Name + 'BinaryVor' + '.tif', Binaryimage.astype('uint8'))
                   imwrite(SavedirHair + Name + 'Vor' + '.tif', Labelimage.astype('uint16'))
-
+                  imwrite(SavedirHair + Name + 'VorRelabelArea' + '.tif', Labelimagerelabel.astype('uint16'))
             
             imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
             imwrite(SavedirHair + Name + '.tif', Hairimage.astype('uint16'))
             
+
+
+        
+        
+    
 
 def Integer_to_border(Label):
 
@@ -379,8 +362,8 @@ def Remove_label(Label, indices):
     Label[indices] = 0 
     return Label    
 
-<<<<<<< HEAD
-def RelabelArea(Label, scale):
+
+def RelabelArea(Label, SavedirHair, Name,  scale):
 
      regions = measure.regionprops(Label)
      areas = [int(regions[i].area) for i in range(len(regions))]
@@ -392,15 +375,33 @@ def RelabelArea(Label, scale):
      scalearea = np.round(scalearea).astype(int)
      scalearea = np.asarray(scalearea)
      print(scalearea)
+     Label_ids = []
+     Area_ids = []
+     
      for i in range(len(regions)):
         label_id = regions[i].label
         area_id = int(regions[i].area)
+        Label_ids.append(label_id)
+        Area_ids.append(area_id)
+        
         scale_id = min(scalearea, key=lambda x:abs(x-area_id))
         only_current_label_id = np.where(Label == label_id, scale_id, 0)
         Relabel = Relabel + only_current_label_id
+        
+     df = pd.DataFrame(list(zip(Label_ids,Area_ids)), 
+                                                                      columns =['Label_ID', 'Area'])
+     
+     mean_area = df['Area'].mean()
+     max_area = df['Area'].max()
+     max_area_index = df.index[df['Area'] == max_area]
+     max_label = df.at[max_area_index, 'Label_ID']
+     
+     print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
+     
+     df.to_csv(SavedirHair + '/' + Name + 'Area_Stats' +  '.csv')
+        
      return Relabel   
-=======
->>>>>>> b6adb6283b6feaa9e461ff078b95c63f1dd712db
+
 def polygons_to_label_coord(Y, X, shape, labelindex):
     """renders polygons to image of given shape
     """
