@@ -17,7 +17,7 @@ from skimage.filters import gaussian
 from six.moves import reduce
 from matplotlib import cm
 from skimage.filters import threshold_local, threshold_otsu
-from skimage.morphology import remove_small_objects, thin
+from skimage.morphology import remove_small_objects, thin, skeletonize
 
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
@@ -115,20 +115,15 @@ def intersection(lst1, lst2):
     return lst3
 
 
-def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices):
+def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize):
 
     #distance = ndi.distance_transform_edt(np.logical_not(image))
 
     Mask = np.logical_xor(Mask > 0, VeinMask > 0)
-    Mask = binary_erosion(Mask, iterations = 10)
-    ColoredMask = label(Mask)
-
-    maskprops = measure.regionprops(ColoredMask, ColoredMask)
-    MaskBbox = [prop.bbox for prop in maskprops]
-    for bbox in MaskBbox:
-      Coordinates.append((bbox[0], bbox[1]))
-      Coordinates.append((bbox[2], bbox[3]))
-    Coordinates.append((0,0))
+    Mask = binary_erosion(Mask, iterations = 4)
+    
+    
+   
     Coordinates = np.asarray(Coordinates)
     coordinates_int = np.round(Coordinates).astype(int)
     markers_raw = np.zeros(image.shape)  
@@ -137,30 +132,24 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices):
     markers = morphology.dilation(markers_raw, morphology.disk(2))
   
     Labelimage = watershed(image, markers, mask = Mask)
-    secondLabelimage = secondwatershed(image, markers, mask = Mask)
-
-
-
 
     Labelimage = Remove_label(Labelimage, indices)
     Labelimage = Remove_label(Labelimage, maskindices)
-    Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
-    binary = Integer_to_border(Labelimage.copy().astype('uint16'))
-
-    secondLabelimage = Remove_label(secondLabelimage, indices)
-    secondLabelimage = Remove_label(secondLabelimage, maskindices)
-    secondBinaryimage = Integer_to_border(secondLabelimage.astype('uint16'))
-    secondbinary = Integer_to_border(secondLabelimage.copy().astype('uint16'))
-
-
-
-     
-    return Labelimage, binary, markers, secondLabelimage,secondbinary  
     
-
-
-
-
+    binary = Integer_to_border(Labelimage.copy().astype('uint16'))
+    
+    filledbinary = binary_fill_holes(binary)
+    filledborder = find_boundaries(filledbinary)
+    binary = binary -  filledborder
+    binarylabel = label(binary)
+    binarylabel = remove_big_objects(binarylabel, maxsize )
+    binary = binarylabel > 0
+    
+    binary = skeletonize(binary.astype('uint8')) 
+    
+     
+    return Labelimage, binary, markers, Mask, filledborder  
+    
 
 def voronoi_finite_polygons_2d(vor, indices, maskindices, radius=None):
     """
@@ -267,7 +256,7 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
     return out          
 
 
-def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis, DoVoronoi = False, DoWatershed = True,min_size = 20, sigma = 5, show_after = 1, scales = 10, maxsize = 10000):
+def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair, n_tiles, axis, Relabel = False, DoVoronoi = False, DoWatershed = True,min_size = 20, sigma = 5, show_after = 1, scales = 10, maxsize = 10000):
 
 
     count = 0
@@ -315,30 +304,30 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             
             if DoWatershed:
 
-               Hairimage[np.where(Hairimage > 0)] = 127
                Maskimage[np.where(Maskimage > 0)] = 255
-               Hairimage = np.logical_xor(Maskimage, Hairimage)
-               Hairimage = np.logical_xor(Hairimage , Veinimage)
-
-               distlabel, distbinary, markers, secondLabelimage,secondbinary = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
+               Veinimage[np.where(Veinimage > 0)] = 255
+               Mask = np.logical_xor(Maskimage > 0, Veinimage > 0)
+               Maskimage = binary_erosion(Mask, iterations = 10)
+               Hairimage[np.where(Hairimage > 0)] = 127
+               Hairimage = Hairimage + Maskimage
+               distlabel, distbinary, markers, Maskimage, Maskboundary = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices,maxsize)
                
                
                distlabel = remove_big_objects(distlabel, maxsize)
-               distlabelrelabel = RelabelArea(distlabel, SavedirHair, Name, scales)
-               
-               secondLabelimage = remove_big_objects(secondLabelimage, maxsize)
-               secondLabelimagerelabel = RelabelArea(secondLabelimage, SavedirHair, Name, scales)
-          
+               if Relabel:
+                  distlabelrelabel = RelabelArea(distlabel, SavedirHair, Name, scales)
+               else:
+                  distlabelrelabel = distlabel
+              
               
                if count%show_after == 0:
                    doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
                imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
-               imwrite(SavedirHair + Name + 'SecondBinaryWater' + '.tif', secondbinary.astype('uint8'))
-              
-
+               imwrite(SavedirHair + Name + 'MaskBorder' + '.tif', Maskboundary.astype('uint8'))
                imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
                imwrite(SavedirHair + Name + 'WaterRelabelArea' + '.tif', distlabelrelabel.astype('uint16'))
                imwrite(SavedirHair + Name + 'Markers' + '.tif', markers.astype('uint16'))
+               imwrite(SavedirHair + Name + 'Mask' + '.tif', Maskimage.astype('uint8'))
              
             if DoVoronoi:
                   vor = Voronoi(np.asarray(Coordinates))
@@ -365,7 +354,10 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                   Labelimage = Remove_label(Labelimage, maskindices)
 
                   Labelimage = remove_big_objects(Labelimage.astype('uint16'), maxsize)
-                  Labelimagerelabel = RelabelArea(Labelimage.astype('uint16'),SavedirHair, Name, scales)
+                  if Relabel:
+                     Labelimagerelabel = RelabelArea(Labelimage.astype('uint16'),SavedirHair, Name, scales)
+                  else:
+                     Labelimagerelabel = Labelimage  
                   Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
                   if count%show_after == 0:
                       doubleplot(Labelimage, Binaryimage, "Label Voronoi", "Binary Voronoi")
@@ -394,7 +386,9 @@ def Integer_to_border(Label):
 
 def Remove_label(Label, indices):
   
-    Label[indices] = 0 
+    label = Label[indices]
+    removeindices = np.where(Label == label)
+    Label[removeindices] = 0 
     return Label    
 
 
@@ -588,17 +582,17 @@ def Integer_to_border(Label):
 
         BoundaryLabel =  find_boundaries(Label, mode='outer')
            
-        Binary = BoundaryLabel > 0
+        BoundaryLabel[BoundaryLabel > 0] = 1
         
-        return Binary
+        return BoundaryLabel
 def Segment(image, model, axis, n_tiles, show_after =  1 ):
     
             Segmented = model.predict(image, axis, n_tiles = n_tiles)
             thresh = threshold_otsu(Segmented)
-            Binary = Segmented > thresh
+            Segmented[Segmented > thresh] = 1
             
             
-            return Binary
+            return Segmented
 
 
     
