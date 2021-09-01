@@ -119,7 +119,7 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize)
 
     #distance = ndi.distance_transform_edt(np.logical_not(image))
 
-    Mask = np.logical_xor(Mask > 0, VeinMask > 0)
+    Mask = Mask - VeinMask
     Mask = binary_erosion(Mask, iterations = 4)
     
     
@@ -306,7 +306,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
 
                Maskimage[np.where(Maskimage > 0)] = 255
                Veinimage[np.where(Veinimage > 0)] = 255
-               Mask = np.logical_xor(Maskimage > 0, Veinimage > 0)
+               Mask = Maskimage - Veinimage
                Maskimage = binary_erosion(Mask, iterations = 10)
                Hairimage[np.where(Hairimage > 0)] = 127
                Hairimage = Hairimage + Maskimage
@@ -581,16 +581,16 @@ def expand_labels(label_image, distance=1):
 def Integer_to_border(Label):
 
         BoundaryLabel =  find_boundaries(Label, mode='outer')
-           
-        BoundaryLabel[BoundaryLabel > 0] = 1
+        indices = np.where(BoundaryLabel > 0)   
+        BoundaryLabel[indices] = 1
         
         return BoundaryLabel
 def Segment(image, model, axis, n_tiles, show_after =  1 ):
     
             Segmented = model.predict(image, axis, n_tiles = n_tiles)
             thresh = threshold_otsu(Segmented)
-            Segmented[Segmented > thresh] = 1
-            
+            indices = np.where(Segmented > thresh)
+            Segmented[indices] = 1
             
             return Segmented
 
