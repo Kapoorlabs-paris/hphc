@@ -18,21 +18,20 @@ from six.moves import reduce
 from matplotlib import cm
 from skimage.filters import threshold_local, threshold_otsu
 from skimage.morphology import remove_small_objects, thin
-from skimage.segmentation import find_boundaries
+
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage.morphology import binary_fill_holes
 from scipy.spatial import Voronoi, voronoi_plot_2d
-from skimage.segmentation import watershed
+from skimage.segmentation import watershed, random_walker
+from skimage.morphology import watershed as secondwatershed
 import os
-from skimage.segmentation import find_boundaries
+
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import difflib
 import pandas as pd
 import glob
 from scipy import ndimage as ndi
-
-from skimage.segmentation import watershed
 from scipy.spatial import ConvexHull
 from tifffile import imread, imwrite
 from scipy import ndimage as ndi
@@ -121,20 +120,47 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices):
     #distance = ndi.distance_transform_edt(np.logical_not(image))
 
     Mask = np.logical_xor(Mask > 0, VeinMask > 0)
+    Mask = binary_erosion(Mask, iterations = 10)
+    ColoredMask = label(Mask)
+
+    maskprops = measure.regionprops(ColoredMask, ColoredMask)
+    MaskBbox = [prop.bbox for prop in maskprops]
+    for bbox in MaskBbox:
+      Coordinates.append((bbox[0], bbox[1]))
+      Coordinates.append((bbox[2], bbox[3]))
+    Coordinates.append((0,0))
+    Coordinates = np.asarray(Coordinates)
     coordinates_int = np.round(Coordinates).astype(int)
     markers_raw = np.zeros(image.shape)  
     markers_raw[tuple(coordinates_int.T)] = 1 + np.arange(len(Coordinates))
 
     markers = morphology.dilation(markers_raw, morphology.disk(2))
   
-    Labelimage = watershed(image, markers)
+    Labelimage = watershed(image, markers, mask = Mask)
+    secondLabelimage = secondwatershed(image, markers, mask = Mask)
+
+
+
+
     Labelimage = Remove_label(Labelimage, indices)
     Labelimage = Remove_label(Labelimage, maskindices)
     Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
     binary = Integer_to_border(Labelimage.copy().astype('uint16'))
+
+    secondLabelimage = Remove_label(secondLabelimage, indices)
+    secondLabelimage = Remove_label(secondLabelimage, maskindices)
+    secondBinaryimage = Integer_to_border(secondLabelimage.astype('uint16'))
+    secondbinary = Integer_to_border(secondLabelimage.copy().astype('uint16'))
+
+
+
      
-    return Labelimage, binary, markers
+    return Labelimage, binary, markers, secondLabelimage,secondbinary  
     
+
+
+
+
 
 def voronoi_finite_polygons_2d(vor, indices, maskindices, radius=None):
     """
@@ -285,8 +311,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             waterproperties = measure.regionprops(LabelHairimage, LabelHairimage)
             Coordinates = [prop.centroid for prop in waterproperties]
             Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
-            Coordinates.append((0,0))
-            Coordinates = np.asarray(Coordinates)
+            
             
             if DoWatershed:
 
@@ -295,18 +320,28 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                Hairimage = np.logical_xor(Maskimage, Hairimage)
                Hairimage = np.logical_xor(Hairimage , Veinimage)
 
-               distlabel, distbinary, markers = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
+               distlabel, distbinary, markers, secondLabelimage,secondbinary = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
+               
+               
                distlabel = remove_big_objects(distlabel, maxsize)
                distlabelrelabel = RelabelArea(distlabel, SavedirHair, Name, scales)
+               
+               secondLabelimage = remove_big_objects(secondLabelimage, maxsize)
+               secondLabelimagerelabel = RelabelArea(secondLabelimage, SavedirHair, Name, scales)
+          
+              
                if count%show_after == 0:
                    doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
                imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
+               imwrite(SavedirHair + Name + 'SecondBinaryWater' + '.tif', secondbinary.astype('uint8'))
+              
+
                imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
                imwrite(SavedirHair + Name + 'WaterRelabelArea' + '.tif', distlabelrelabel.astype('uint16'))
                imwrite(SavedirHair + Name + 'Markers' + '.tif', markers.astype('uint16'))
              
             if DoVoronoi:
-                  vor = Voronoi(Coordinates)
+                  vor = Voronoi(np.asarray(Coordinates))
                   regions, vertices, vol = voronoi_finite_polygons_2d(vor, indices, maskindices)
                   pts = MultiPoint([Point(i) for i in Coordinates])
                   mask = pts.convex_hull
@@ -393,7 +428,7 @@ def RelabelArea(Label, SavedirHair, Name,  scale):
      
      mean_area = df['Area'].mean()
      max_area = df['Area'].max()
-     dllabels = df['Label_ID'] 
+     dflabels = df['Label_ID'] 
      max_label = dflabels[df['Area'] == max_area]
      
      print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
