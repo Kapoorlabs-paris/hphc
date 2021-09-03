@@ -406,7 +406,7 @@ def Measure(Label, SavedirHair, Name, SaveName):
      max_label = dflabels[df['Area'] == max_area]
      
      print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
-     densityplot = sns.hisplot(df.Area)
+     densityplot = sns.histplot(df.Area, kde = True)
      
      densityplot.savefig(SavedirHair + '/' + Name + SaveName +  "Densityplot.png", dpi = 300)
      df.to_csv(SavedirHair + '/' + Name + SaveName + 'Area_Stats' +  '.csv')  
