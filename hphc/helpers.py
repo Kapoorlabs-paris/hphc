@@ -262,7 +262,7 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
     return out          
 
 
-def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis,min_size = 5000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000):
+def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis,min_size = 8000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000):
 
 
     count = 0
@@ -374,8 +374,8 @@ def MeasureArea(Label,LabelMaskImage, SavedirHair, Name):
      plt.imshow(LabelMaskImage)
      plt.show()
      prop = [measure.regionprops(LabelMaskImage)]
-     for label in prop.label:
-          
+     for i in range(prop.label):
+          label = prop.label[i]
           print(label)
           np.where(LabelMaskImage == label, 1, 0)
           RegionLabel = np.multiply(Label, LabelMaskImage )   
