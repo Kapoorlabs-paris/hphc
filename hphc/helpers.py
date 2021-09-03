@@ -120,9 +120,9 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize)
     #distance = ndi.distance_transform_edt(np.logical_not(image))
 
     Mask = np.subtract(Mask, VeinMask, dtype=np.float32)
-    CopyMask = Mask.copy()
+   
     Mask = binary_erosion(Mask, iterations = 4)
-    CopyMask = binary_erosion(CopyMask, iterations = 10)
+   
     
     image[indices] = 0 
     image[maskindices] = 0
@@ -148,12 +148,13 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize)
     binarylabel = label(invert(binary_dilation(binary)))
     
     binarylabel = remove_big_objects(binarylabel, maxsize )
+    
     binarylabel = expand_labels(binarylabel, distance = 4)
     binary = find_boundaries(binarylabel)
     binary = binary > 0
     Labelimage = Remove_label(Labelimage, indices)
     Labelimage = Remove_label(Labelimage, maskindices) 
-    
+    CopyMask = Labelimage > 0 
      
     return Labelimage, binary, markers, CopyMask, filledborder  
     
@@ -380,8 +381,10 @@ def MeasureArea(Label,LabelMaskImage, SavedirHair, Name):
      for i in range(0,len(Labels)):
           label = Labels[i]
           print(label)
-          np.where(LabelMaskImage == label, 1, 0)
+          LabelMaskImage = np.where(LabelMaskImage == label, 1, 0)
           RegionLabel = np.multiply(Label, LabelMaskImage )   
+          plt.imshow(RegionLabel)
+          plt.show()
           LabelCellCount = Measure(RegionLabel, SavedirHair, Name, str(label))
           Collabels.append(str(label))
           Colarea.append(LabelCellCount)
@@ -408,7 +411,7 @@ def Measure(Label, SavedirHair, Name, SaveName):
      print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
      densityplot = sns.histplot(df.Area, kde = True)
      
-     densityplot.savefig(SavedirHair + '/' + Name + SaveName +  "Densityplot.png", dpi = 300)
+     densityplot.figure.savefig(SavedirHair + '/' + Name + SaveName +  "Densityplot.png", dpi = 300)
      df.to_csv(SavedirHair + '/' + Name + SaveName + 'Area_Stats' +  '.csv')  
     
      return AllCellCount
