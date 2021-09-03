@@ -18,7 +18,7 @@ from six.moves import reduce
 from matplotlib import cm
 from skimage.filters import threshold_local, threshold_otsu
 from skimage.morphology import remove_small_objects, thin, skeletonize
-
+import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 from scipy.ndimage.morphology import binary_fill_holes
@@ -123,7 +123,8 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize)
     Mask = binary_erosion(Mask, iterations = 4)
     
     
-   
+    image[indices] = 0 
+    image[maskindices] = 0
     Coordinates = np.asarray(Coordinates)
     coordinates_int = np.round(Coordinates).astype(int)
     markers_raw = np.zeros(image.shape)  
@@ -131,22 +132,26 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize)
 
     markers = morphology.dilation(markers_raw, morphology.disk(2))
   
-    Labelimage = watershed(image, markers, mask = Mask)
-
-    Labelimage = Remove_label(Labelimage, indices)
-    Labelimage = Remove_label(Labelimage, maskindices)
+    Labelimage = watershed(image, markers)
     
     binary = Integer_to_border(Labelimage.copy().astype('uint16'))
     
     filledbinary = binary_fill_holes(binary)
     filledborder = find_boundaries(filledbinary)
-    binary = np.subtract(binary, filledborder, dtype=np.float32)
+ 
+    binary[indices] = 0 
+    binary[maskindices] = 0
+    Labelimage[indices] = 0
+    Labelimage[maskindices] = 0
 
-    binarylabel = label(invert(binary))
-    binarylabel = remove_big_objects(binarylabel, maxsize )
-    binary = binarylabel > 0
+    binarylabel = label(invert(binary_dilation(binary)))
     
-    binary = skeletonize(binary.astype('uint8')) 
+    binarylabel = remove_big_objects(binarylabel, maxsize )
+    binarylabel = expand_labels(binarylabel, distance = 4)
+    binary = find_boundaries(binarylabel)
+    binary = binary > 0
+    Labelimage = Remove_label(Labelimage, indices)
+    Labelimage = Remove_label(Labelimage, maskindices) 
     
      
     return Labelimage, binary, markers, Mask, filledborder  
@@ -257,7 +262,7 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
     return out          
 
 
-def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis, DoVoronoi = False, DoWatershed = True,min_size = 20, sigma = 5, show_after = 1, scales = 10, maxsize = 10000, Relabel = False):
+def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis,min_size = 5000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000):
 
 
     count = 0
@@ -303,68 +308,22 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
             
             
-            if DoWatershed:
+            Hairimage[np.where(Hairimage > 0)] = 127
+            Maskimage[np.where(Maskimage > 0)] = 255
+            Hairimage = np.logical_xor(Maskimage, Hairimage)
+            Hairimage = np.logical_xor(Hairimage , Veinimage)
 
-               Hairimage[np.where(Hairimage > 0)] = 127
-               Maskimage[np.where(Maskimage > 0)] = 255
-               Hairimage = np.logical_xor(Maskimage, Hairimage)
-               Hairimage = np.logical_xor(Hairimage , Veinimage)
-
-               distlabel, distbinary, markers,Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices, maxsize)
-               
-               
-               distlabel = remove_big_objects(distlabel, maxsize)
-               if Relabel:
-                  distlabelrelabel = RelabelArea(distlabel, SavedirHair, Name, scales)
-               else:
-                 distlabelrelabel = distlabel            
+            distlabel, distbinary, markers,Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices, maxsize)
+            distlabel = remove_big_objects(distlabel, maxsize)
+            MeasureArea(distlabel, SavedirHair, Name)
+                          
                
               
-               if count%show_after == 0:
+            if count%show_after == 0:
                    doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
-               imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
-               imwrite(SavedirHair + Name + 'Mask' + '.tif', Maskimage.astype('uint8'))
-               imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
-               imwrite(SavedirHair + Name + 'WaterRelabelArea' + '.tif', distlabelrelabel.astype('uint16'))
-               imwrite(SavedirHair + Name + 'Markers' + '.tif', markers.astype('uint16'))
-             
-            if DoVoronoi:
-                  vor = Voronoi(np.asarray(Coordinates))
-                  regions, vertices, vol = voronoi_finite_polygons_2d(vor, indices, maskindices)
-                  pts = MultiPoint([Point(i) for i in Coordinates])
-                  mask = pts.convex_hull
-                  labelindex = 1 
-                  for i in range(len(regions)):
-                      region = regions[i]
-                      volume = vol[i]
-                      if volume is not np.inf:
-                              polygon = vertices[region]
-                              shape = list(polygon.shape)
-                              shape[0] += 1
-                              p = Polygon(np.append(polygon, polygon[0]).reshape(*shape)).intersection(mask)
-                              polyY = np.array(list(zip(p.boundary.coords.xy[0][:-1])))
-                              polyX = np.array(list(zip(p.boundary.coords.xy[1][:-1])))
-
-                              smalllabel = polygons_to_label_coord(polyY, polyX, maximage.shape, labelindex)
-                              Labelimage = Labelimage + smalllabel
-                              labelindex = labelindex + 1
-                              
-                  Labelimage = Remove_label(Labelimage, indices)
-                  Labelimage = Remove_label(Labelimage, maskindices)
-
-                  Labelimage = remove_big_objects(Labelimage.astype('uint16'), maxsize)
-                  if Relabel:
-                      Labelimagerelabel = RelabelArea(Labelimage.astype('uint16'),SavedirHair, Name, scales)
-                  else:
-                      Labelimagerelabel = Labelimage    
-                  Binaryimage = Integer_to_border(Labelimage.astype('uint16'))
-                  if count%show_after == 0:
-                      doubleplot(Labelimage, Binaryimage, "Label Voronoi", "Binary Voronoi")
-
-                  imwrite(SavedirHair + Name + 'BinaryVor' + '.tif', Binaryimage.astype('uint8'))
-                  imwrite(SavedirHair + Name + 'Vor' + '.tif', Labelimage.astype('uint16'))
-                  imwrite(SavedirHair + Name + 'VorRelabelArea' + '.tif', Labelimagerelabel.astype('uint16'))
-            
+            imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
+            imwrite(SavedirHair + Name + 'Mask' + '.tif', Maskimage.astype('uint8'))
+            imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
             imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
             imwrite(SavedirHair + Name + '.tif', Hairimage.astype('uint16'))
             
@@ -391,32 +350,13 @@ def Remove_label(Label, indices):
     return Label    
 
 
-def RelabelArea(Label, SavedirHair, Name,  scale):
+def MeasureArea(Label, SavedirHair, Name):
 
      regions = measure.regionprops(Label)
      areas = [int(regions[i].area) for i in range(len(regions))]
-     Relabel = np.zeros(Label.shape)
-     minArea = min(areas)
-     maxArea = max(areas)
-     print(minArea, maxArea)
-     scalearea = [minArea + (t/scale) * (maxArea - minArea) for t in range(0,scale)]
-     scalearea = np.round(scalearea).astype(int)
-     scalearea = np.asarray(scalearea)
-     print(scalearea)
-     Label_ids = []
-     Area_ids = []
-     
-     for i in range(len(regions)):
-        label_id = regions[i].label
-        area_id = int(regions[i].area)
-        Label_ids.append(label_id)
-        Area_ids.append(area_id)
-        
-        scale_id = min(scalearea, key=lambda x:abs(x-area_id))
-        only_current_label_id = np.where(Label == label_id, scale_id, 0)
-        Relabel = Relabel + only_current_label_id
-        
-     df = pd.DataFrame(list(zip(Label_ids,Area_ids)), 
+     labels = [int(regions[i].label) for i in range(len(regions))]
+    
+     df = pd.DataFrame(list(zip(labels,areas)), 
                                                                       columns =['Label_ID', 'Area'])
      
      mean_area = df['Area'].mean()
@@ -425,10 +365,12 @@ def RelabelArea(Label, SavedirHair, Name,  scale):
      max_label = dflabels[df['Area'] == max_area]
      
      print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
-     
+     densityplot = sns.distplot(df.Area)
+     fig = densityplot.get_figure()
+     fig.savefig(SavedirHair + '/' + Name + "Densityplot.png")
      df.to_csv(SavedirHair + '/' + Name + 'Area_Stats' +  '.csv')
         
-     return Relabel   
+      
 
 def polygons_to_label_coord(Y, X, shape, labelindex):
     """renders polygons to image of given shape
@@ -610,7 +552,7 @@ def generate_2D_patch_training_data(BaseDirectory, SaveNpzDirectory, SaveName, p
 
      
    
-def BadSegmentation(maximage, min_size = 20, sigma = 5):
+def BadSegmentation(maximage, min_size = 20, sigma = 1):
 
                     maximage = gaussian_filter(maximage, sigma = sigma)
                     thresh = threshold_otsu(maximage) 
