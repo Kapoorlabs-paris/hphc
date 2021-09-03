@@ -315,7 +315,19 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
 
             distlabel, distbinary, markers,Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices, maxsize)
             distlabel = remove_big_objects(distlabel, maxsize)
-            MeasureArea(distlabel, SavedirHair, Name)
+            
+            LabelMaskimage = label(Maskimage)
+            LabelMaskimage = remove_small_objects(LabelMaskimage, min_size)
+            regions = measure.regionprops(LabelMaskimage)
+            regions = sorted(regions, key= lambda r:r.area, reverse = True)
+            relabel = 1
+            for region in regions:
+                indices = np.where(LabelMaskimage == region.label)
+                LabelMaskimage[indices] = relabel
+                relabel = relabel + 1
+           
+
+            MeasureArea(distlabel, LabelMaskimage, SavedirHair, Name)
                           
                
               
@@ -350,12 +362,36 @@ def Remove_label(Label, indices):
     return Label    
 
 
-def MeasureArea(Label, SavedirHair, Name):
+def MeasureArea(Label,LabelMaskImage, SavedirHair, Name):
 
+     AllCellCount = Measure(Label,LabelMaskImage, SavedirHair, Name, 'All')
+     CellCounter = {}
+     Collabels = []
+     Colarea = []
+     Collabels.append('All')
+     Colarea.append(AllCellCount)
+
+     plt.imshow(LabelMaskImage)
+     plt.show()
+     prop = [measure.regionprops(LabelMaskImage)]
+     for label in prop.label:
+          
+          print(label)
+          np.where(LabelMaskImage == label, 1, 0)
+          RegionLabel = np.multiply(Label, LabelMaskImage )   
+          LabelCellCount = Measure(Label,LabelMaskImage, SavedirHair, Name, str(label))
+          Collabels.append(str(label))
+          Colarea.append(LabelCellCount)
+         
+     CellCounter['Labels'] = [Collabels]
+     CellCounter['Count'] = [Colarea]
+     cellcountdf = pd.DataFrame.from_dict(CellCounter)
+     cellcountdf.to_csv(SavedirHair + '/' + Name + 'Cell_Label_Counts' +  '.csv') 
+def Measure(Label,LabelMaskImage, SavedirHair, Name, SaveName):
      regions = measure.regionprops(Label)
      areas = [int(regions[i].area) for i in range(len(regions))]
      labels = [int(regions[i].label) for i in range(len(regions))]
-    
+     AllCellCount = len(labels)
      df = pd.DataFrame(list(zip(labels,areas)), 
                                                                       columns =['Label_ID', 'Area'])
      
@@ -365,12 +401,12 @@ def MeasureArea(Label, SavedirHair, Name):
      max_label = dflabels[df['Area'] == max_area]
      
      print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
-     densityplot = sns.distplot(df.Area)
-     fig = densityplot.get_figure()
-     fig.savefig(SavedirHair + '/' + Name + "Densityplot.png")
-     df.to_csv(SavedirHair + '/' + Name + 'Area_Stats' +  '.csv')
-        
-      
+     densityplot = sns.displot(df.Area)
+     
+     densityplot.savefig(SavedirHair + '/' + Name + SaveName +  "Densityplot.png", dpi = 300)
+     df.to_csv(SavedirHair + '/' + Name + SaveName + 'Area_Stats' +  '.csv')  
+    
+     return AllCellCount
 
 def polygons_to_label_coord(Y, X, shape, labelindex):
     """renders polygons to image of given shape
