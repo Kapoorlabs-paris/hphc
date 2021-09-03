@@ -264,7 +264,7 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
     return out          
 
 
-def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis,min_size = 8000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000):
+def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis,min_size = 10000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000):
 
 
     count = 0
@@ -315,10 +315,20 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             Hairimage = np.logical_xor(Maskimage, Hairimage)
             Hairimage = np.logical_xor(Hairimage , Veinimage)
 
-            distlabel, distbinary, markers,Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices, maxsize)
+            distlabel, distbinary, markers, Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices, maxsize)
             distlabel = remove_big_objects(distlabel, maxsize)
             
-            LabelMaskimage = label(Maskimage)
+            LabelMaskimage = label(distlabel > 0)
+            LabelMaskimage = remove_small_objects(LabelMaskimage, min_size)
+            regions = measure.regionprops(LabelMaskimage)
+            regions = sorted(regions, key= lambda r:r.area, reverse = True)
+            relabel = 1
+            for region in regions:
+                indices = np.where(LabelMaskimage == region.label)
+                LabelMaskimage[indices] = relabel
+                relabel = relabel + 1
+           
+
 
             MeasureArea(distlabel, LabelMaskimage, SavedirHair, Name)
               
@@ -327,6 +337,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
             imwrite(SavedirHair + Name + 'Mask' + '.tif', Maskimage.astype('uint8'))
             imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
+            imwrite(SavedirHair + Name + 'Compartments' + '.tif', LabelMaskimage.astype('uint16'))
             imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
             imwrite(SavedirHair + Name + '.tif', Hairimage.astype('uint16'))
             
@@ -368,14 +379,15 @@ def MeasureArea(Label,LabelMaskImage, SavedirHair, Name):
      
      for i in range(0,len(Labels)):
           label = Labels[i]
-          print(label)
-          LabelMaskImage = np.where(LabelMaskImage == label, 1, 0)
-          RegionLabel = np.multiply(Label, LabelMaskImage )   
-          plt.imshow(RegionLabel)
-          plt.show()
+          
+          RegionLabel = np.where(LabelMaskImage == label, 1, 0)
+          
+          RegionLabel = np.multiply(Label, RegionLabel )   
+          
           LabelCellCount = Measure(RegionLabel, SavedirHair, Name, str(label))
-          Collabels.append(str(label))
-          Colarea.append(LabelCellCount)
+          if LabelCellCount is not None:
+             Collabels.append(str(label))
+             Colarea.append(LabelCellCount)
          
      CellCounter['Labels'] = [Collabels]
      CellCounter['Count'] = [Colarea]
@@ -395,14 +407,14 @@ def Measure(Label, SavedirHair, Name, SaveName):
      max_area = df['Area'].max()
      dflabels = df['Label_ID'] 
      max_label = dflabels[df['Area'] == max_area]
-     
-     print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
-     densityplot = sns.histplot(df.Area, kde = True)
-     
-     densityplot.figure.savefig(SavedirHair + '/' + Name + SaveName +  "Densityplot.png", dpi = 300)
-     df.to_csv(SavedirHair + '/' + Name + SaveName + 'Area_Stats' +  '.csv')  
-    
-     return AllCellCount
+     if mean_area > 0:
+          print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
+          densityplot = sns.histplot(df.Area, kde = True)
+          densityplot.figure.savefig(SavedirHair + '/' + Name + SaveName +  "Densityplot.png", dpi = 300)
+          plt.show()
+          df.to_csv(SavedirHair + '/' + Name + SaveName + 'Area_Stats' +  '.csv')  
+          
+          return AllCellCount
 
 def polygons_to_label_coord(Y, X, shape, labelindex):
     """renders polygons to image of given shape
