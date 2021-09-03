@@ -120,8 +120,9 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize)
     #distance = ndi.distance_transform_edt(np.logical_not(image))
 
     Mask = np.subtract(Mask, VeinMask, dtype=np.float32)
+    CopyMask = Mask.copy()
     Mask = binary_erosion(Mask, iterations = 4)
-    
+    CopyMask = binary_erosion(CopyMask, iterations = 10)
     
     image[indices] = 0 
     image[maskindices] = 0
@@ -154,7 +155,7 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize)
     Labelimage = Remove_label(Labelimage, maskindices) 
     
      
-    return Labelimage, binary, markers, Mask, filledborder  
+    return Labelimage, binary, markers, CopyMask, filledborder  
     
 
 def voronoi_finite_polygons_2d(vor, indices, maskindices, radius=None):
@@ -322,6 +323,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             regions = sorted(regions, key= lambda r:r.area, reverse = True)
             relabel = 1
             for region in regions:
+                print('relabel', relabel)
                 indices = np.where(LabelMaskimage == region.label)
                 LabelMaskimage[indices] = relabel
                 relabel = relabel + 1
@@ -364,7 +366,7 @@ def Remove_label(Label, indices):
 
 def MeasureArea(Label,LabelMaskImage, SavedirHair, Name):
 
-     AllCellCount = Measure(Label,LabelMaskImage, SavedirHair, Name, 'All')
+     AllCellCount = Measure(Label, SavedirHair, Name, 'All')
      CellCounter = {}
      Collabels = []
      Colarea = []
@@ -373,13 +375,14 @@ def MeasureArea(Label,LabelMaskImage, SavedirHair, Name):
 
      plt.imshow(LabelMaskImage)
      plt.show()
-     prop = [measure.regionprops(LabelMaskImage)]
-     for i in range(prop.label):
-          label = prop.label[i]
+     Labels = [prop.label for prop in measure.regionprops(LabelMaskImage)]
+     
+     for i in range(0,len(Labels)):
+          label = Labels[i]
           print(label)
           np.where(LabelMaskImage == label, 1, 0)
           RegionLabel = np.multiply(Label, LabelMaskImage )   
-          LabelCellCount = Measure(Label,LabelMaskImage, SavedirHair, Name, str(label))
+          LabelCellCount = Measure(RegionLabel, SavedirHair, Name, str(label))
           Collabels.append(str(label))
           Colarea.append(LabelCellCount)
          
@@ -387,7 +390,9 @@ def MeasureArea(Label,LabelMaskImage, SavedirHair, Name):
      CellCounter['Count'] = [Colarea]
      cellcountdf = pd.DataFrame.from_dict(CellCounter)
      cellcountdf.to_csv(SavedirHair + '/' + Name + 'Cell_Label_Counts' +  '.csv') 
-def Measure(Label,LabelMaskImage, SavedirHair, Name, SaveName):
+
+
+def Measure(Label, SavedirHair, Name, SaveName):
      regions = measure.regionprops(Label)
      areas = [int(regions[i].area) for i in range(len(regions))]
      labels = [int(regions[i].label) for i in range(len(regions))]
@@ -401,7 +406,7 @@ def Measure(Label,LabelMaskImage, SavedirHair, Name, SaveName):
      max_label = dflabels[df['Area'] == max_area]
      
      print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
-     densityplot = sns.displot(df.Area)
+     densityplot = sns.hisplot(df.Area)
      
      densityplot.savefig(SavedirHair + '/' + Name + SaveName +  "Densityplot.png", dpi = 300)
      df.to_csv(SavedirHair + '/' + Name + SaveName + 'Area_Stats' +  '.csv')  
