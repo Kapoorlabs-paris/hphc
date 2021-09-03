@@ -319,20 +319,8 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             distlabel = remove_big_objects(distlabel, maxsize)
             
             LabelMaskimage = label(Maskimage)
-            LabelMaskimage = remove_small_objects(LabelMaskimage, min_size)
-            regions = measure.regionprops(LabelMaskimage)
-            regions = sorted(regions, key= lambda r:r.area, reverse = True)
-            relabel = 1
-            for region in regions:
-                print('relabel', relabel)
-                indices = np.where(LabelMaskimage == region.label)
-                LabelMaskimage[indices] = relabel
-                relabel = relabel + 1
-           
 
             MeasureArea(distlabel, LabelMaskimage, SavedirHair, Name)
-                          
-               
               
             if count%show_after == 0:
                    doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
