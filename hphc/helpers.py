@@ -115,7 +115,7 @@ def intersection(lst1, lst2):
     return lst3
 
 
-def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize):
+def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize = 1.0E308):
 
     #distance = ndi.distance_transform_edt(np.logical_not(image))
 
@@ -263,6 +263,20 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
 
     return out          
 
+
+def AfterUNET(Hairimage, Coordinates, Maskimage, Veinimage):
+    
+            Labelimage = np.zeros(Hairimage.shape)
+            Veinimagecopy = Veinimage.copy()
+            indices = np.where(Veinimagecopy > 0)
+            
+            Maskimagecopy = Maskimage.copy()
+            maskindices = np.where(Maskimagecopy == 0)
+            Hairimage[maskindices] = 0
+         
+            distlabel, distbinary, markers, Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
+            
+            return distlabel, distbinary
 
 def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis,min_size = 10000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000):
 
