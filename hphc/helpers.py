@@ -278,14 +278,14 @@ def AfterUNET(Hairimage, Coordinates, Maskimage, Veinimage):
             
             return distlabel, distbinary
 
-def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,SavedirVein, SavedirHair,  n_tiles, axis,min_size = 10000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000):
+def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Savedir,  n_tiles, axis,min_size = 10000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000, dostats = False):
 
 
     count = 0
     Path(SavedirMax).mkdir(exist_ok=True)
     Path(SavedirAvg).mkdir(exist_ok=True)
-    Path(SavedirVein).mkdir(exist_ok=True)
-    Path(SavedirHair).mkdir(exist_ok=True)
+    Path(Savedir).mkdir(exist_ok=True)
+   
     for fname in filesRaw:
             count = count + 1
             
@@ -294,7 +294,6 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             maximage = np.max(image, axis = 0)
             avgimage = np.mean(image, axis = 0)
             Maskimage = BadSegmentation(maximage, min_size = min_size, sigma = sigma)
-            imwrite(SavedirMax + Name + 'Mask' + '.tif', Maskimage.astype('uint8'))
             imwrite(SavedirMax + Name + '.tif', maximage.astype('uint8'))
             imwrite(SavedirAvg + Name + '.tif', avgimage.astype('uint8'))
             
@@ -343,17 +342,16 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
                 relabel = relabel + 1
            
 
-
-            MeasureArea(distlabel, LabelMaskimage, SavedirHair, Name)
+            if dostats:
+               MeasureArea(distlabel, LabelMaskimage, SavedirHair, Name)
               
             if count%show_after == 0:
                    doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
-            imwrite(SavedirHair + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
-            imwrite(SavedirHair + Name + 'Mask' + '.tif', Maskimage.astype('uint8'))
-            imwrite(SavedirHair + Name + 'Water' + '.tif', distlabel.astype('uint16'))
-            imwrite(SavedirHair + Name + 'Compartments' + '.tif', LabelMaskimage.astype('uint16'))
-            imwrite(SavedirVein + Name + '.tif', Veinimage.astype('uint16'))
-            imwrite(SavedirHair + Name + '.tif', Hairimage.astype('uint16'))
+            imwrite(Savedir + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
+            imwrite(Savedir + Name + 'Water' + '.tif', distlabel.astype('uint16'))
+            imwrite(Savedir + Name + 'Mask' + '.tif', LabelMaskimage.astype('uint16'))
+            imwrite(Savedir + Name + 'Vein' +  '.tif', Veinimage.astype('uint16'))
+            imwrite(Savedir + Name + 'Hair' +  '.tif', Hairimage.astype('uint16'))
             
 
 
