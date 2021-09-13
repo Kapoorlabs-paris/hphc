@@ -238,7 +238,8 @@ class VizCorrect(object):
                     self.dataset_index = self.dataset.index
                     self.ax.cla()
                     
-                    self.ax.hist(self.dataset.Area, density = True)
+                    sns.histplot(self.dataset.Area, kde = True, ax = self.ax)
+                    #self.ax.hist(self.dataset.Area, density = True)
                     self.ax.set_title(imagename + "Size")
                     self.ax.set_xlabel("Time")
                     self.ax.set_ylabel("Counts")
