@@ -195,28 +195,28 @@ class VizCorrect(object):
                                      
         def second_image_add(self, image_toread, imagename, compute = False, save = False):
                 
-             
-                for layer in list(self.viewer.layers):
-                                         
-                    if 'Image' in layer.name or layer.name in 'Image':
-                                                      
-                                                    self.viewer.layers.remove(layer)
-                                
-                                
-                self.image = daskread(image_toread)
-                if len(self.image.shape) > 3:
-                    self.image = self.image[0,:]
-                    
-                self.maskimage = daskread(self.savedir + imagename + self.mask_name + '.tif')
-                self.integerimage = daskread(self.savedir + imagename + self.hair_seg_name + '.tif')
-                self.binaryimage = daskread(self.savedir + imagename + self.binary_name + '.tif')
-                
-                
-                self.viewer.add_image(self.image, name='Image'+imagename)
-                self.viewer.add_labels(self.integerimage, name ='Image'+'Integer_Labels'+imagename)
+                if not compute or not save:
+                        for layer in list(self.viewer.layers):
 
-                self.viewer.add_labels(self.binaryimage, name ='Image'+'Binary_Segmentation'+imagename)
-                self.viewer.add_labels(self.maskimage, name ='Image'+'Wing_Mask'+imagename)
+                            if 'Image' in layer.name or layer.name in 'Image':
+
+                                                            self.viewer.layers.remove(layer)
+
+
+                        self.image = daskread(image_toread)
+                        if len(self.image.shape) > 3:
+                            self.image = self.image[0,:]
+
+                        self.maskimage = daskread(self.savedir + imagename + self.mask_name + '.tif')
+                        self.integerimage = daskread(self.savedir + imagename + self.hair_seg_name + '.tif')
+                        self.binaryimage = daskread(self.savedir + imagename + self.binary_name + '.tif')
+
+
+                        self.viewer.add_image(self.image, name='Image'+imagename)
+                        self.viewer.add_labels(self.integerimage, name ='Image'+'Integer_Labels'+imagename)
+
+                        self.viewer.add_labels(self.binaryimage, name ='Image'+'Binary_Segmentation'+imagename)
+                        self.viewer.add_labels(self.maskimage, name ='Image'+'Wing_Mask'+imagename)
                 
                 
                 if compute:
@@ -263,30 +263,30 @@ class VizCorrect(object):
         def image_add(self, image_toread, imagename, save = False):
                                     
                
-               
-                for layer in list(self.viewer.layers):
-                                         
-                    if 'Image' in layer.name or layer.name in 'Image':
-                                                      
-                                                    self.viewer.layers.remove(layer)
-                self.image = daskread(image_toread)
-                if len(self.image.shape) > 3:
-                    self.image = self.image[0,:]
-                    
-                self.maskimage = imread(self.savedir + imagename + self.mask_name + '.tif')
-                self.integerimage = imread(self.savedir + imagename + self.hair_seg_name + '.tif')
-                self.markerimage = imread(self.savedir + imagename + self.marker_name + '.tif')
-                self.markerimage = self.markerimage.astype('uint16')
-                self.viewer.add_image(self.image, name= 'Image'+imagename )
-                
-                NewMarkerImage = np.zeros(self.markerimage.shape)
-              
-                waterproperties = measure.regionprops(self.markerimage)
-                
-                Coordinates = [prop.centroid for prop in waterproperties]
-                
-                Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
-                self.viewer.add_points(data = Coordinates, name='Image'+'Markers' +imagename, face_color='red', ndim = 2)
+                if not save:
+                        for layer in list(self.viewer.layers):
+
+                            if 'Image' in layer.name or layer.name in 'Image':
+
+                                                            self.viewer.layers.remove(layer)
+                        self.image = daskread(image_toread)
+                        if len(self.image.shape) > 3:
+                            self.image = self.image[0,:]
+
+                        self.maskimage = imread(self.savedir + imagename + self.mask_name + '.tif')
+                        self.integerimage = imread(self.savedir + imagename + self.hair_seg_name + '.tif')
+                        self.markerimage = imread(self.savedir + imagename + self.marker_name + '.tif')
+                        self.markerimage = self.markerimage.astype('uint16')
+                        self.viewer.add_image(self.image, name= 'Image'+imagename )
+
+                        NewMarkerImage = np.zeros(self.markerimage.shape)
+
+                        waterproperties = measure.regionprops(self.markerimage)
+
+                        Coordinates = [prop.centroid for prop in waterproperties]
+
+                        Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
+                        self.viewer.add_points(data = Coordinates, name='Image'+'Markers' +imagename, face_color='red', ndim = 2)
 
 
                 if save:
