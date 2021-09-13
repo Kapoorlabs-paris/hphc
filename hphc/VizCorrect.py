@@ -28,7 +28,9 @@ from hphc.helpers import AfterUNET, Integer_to_border, MeasureArea, DistWater
 from tifffile import imread, imwrite
 import pandas as pd
 import imageio
+from tqdm import tqdm
 import seaborn as sns
+from skimage import measure
 from skimage.measure import label
 from dask.array.image import imread as daskread
 Boxname = 'ImageIDBox'
@@ -145,8 +147,6 @@ class VizCorrect(object):
                  
                  for imagename in X:
                      Imageids.append(imagename)
-                     print(imagename)
-                 
                 
                     
                  imageidbox = QComboBox()   
@@ -194,9 +194,13 @@ class VizCorrect(object):
 
                                      
         def second_image_add(self, image_toread, imagename, compute = False, save = False):
-                                    
+                
+             
                 for layer in list(self.viewer.layers):
-                                         self.viewer.layers.remove(layer)
+                                         
+                    if 'Image' in layer.name or layer.name in 'Image':
+                                                      
+                                                    self.viewer.layers.remove(layer)
                                 
                                 
                 self.image = daskread(image_toread)
@@ -208,25 +212,31 @@ class VizCorrect(object):
                 self.binaryimage = daskread(self.savedir + imagename + self.binary_name + '.tif')
                 
                 
-                self.viewer.add_image(self.image, name= 'Image' + imagename )
-                self.viewer.add_labels(self.integerimage, name =  'Integer_Labels' + imagename)
+                self.viewer.add_image(self.image, name='Image'+imagename)
+                self.viewer.add_labels(self.integerimage, name ='Image'+'Integer_Labels'+imagename)
 
-                self.viewer.add_labels(self.binaryimage, name = 'Binary_Segmentation' + imagename)
-                self.viewer.add_labels(self.maskimage, name = 'Wing_Mask' + imagename)
+                self.viewer.add_labels(self.binaryimage, name ='Image'+'Binary_Segmentation'+imagename)
+                self.viewer.add_labels(self.maskimage, name ='Image'+'Wing_Mask'+imagename)
                 
                 
                 if compute:
                     
                     
 
-                    BinaryImage = self.binaryimage #Integer_to_border(ModifiedArraySeg)
+                    ModifiedArraySeg = viewer.layers['Image'+'Integer_Labels'+imagename].data 
+                    ModifiedArraySeg = ModifiedArraySeg.astype('uint16')
+                    LabelMaskImage = ModifiedArraySeg > 0
+                    Compartment = label(LabelMaskImage)
+                    ModifiedArrayMask = viewer.layers['Image'+'Wing_Mask'+imagename].data 
+                    ModifiedArrayMask = ModifiedArrayMask.astype('uint8')
+
+                  
                     
                     self.dataset, densityplot = MeasureArea(Compartment,LabelMaskImage, self.savedir, imagename, self.doCompartment)
-                    print(self.dataset) 
                     self.dataset_index = self.dataset.index
                     self.ax.cla()
                     
-                    self.ax.sns.histplot(self.dataset.Area, kde = True)
+                    self.ax.plt.hist(self.dataset.Area, density = True)
                     self.ax.set_title(imagename + "Size")
                     self.ax.set_xlabel("Time")
                     self.ax.set_ylabel("Counts")
@@ -235,11 +245,11 @@ class VizCorrect(object):
 
                 if save:
 
-                        ModifiedArraySeg = viewer.layers['Integer_Labels' + imagename].data 
+                        ModifiedArraySeg = viewer.layers['Image'+'Integer_Labels' + imagename].data 
                         ModifiedArraySeg = ModifiedArraySeg.astype('uint16')
                         LabelMaskImage = ModifiedArraySeg > 0
                         Compartment = label(LabelMaskImage)
-                        ModifiedArrayMask = viewer.layers['Wing_Mask'+ imagename].data 
+                        ModifiedArrayMask = viewer.layers['Image'+'Wing_Mask'+imagename].data 
                         ModifiedArrayMask = ModifiedArrayMask.astype('uint8')
 
                         BinaryImage = Integer_to_border(ModifiedArraySeg)
@@ -252,30 +262,36 @@ class VizCorrect(object):
             
         def image_add(self, image_toread, imagename, save = False):
                                     
+               
+               
                 for layer in list(self.viewer.layers):
-                                         if imagename in layer.name or layer.name in imagename:
+                                         
+                    if 'Image' in layer.name or layer.name in 'Image':
+                                                      
                                                     self.viewer.layers.remove(layer)
                 self.image = daskread(image_toread)
                 if len(self.image.shape) > 3:
                     self.image = self.image[0,:]
                     
-                self.maskimage = daskread(self.savedir + imagename + self.mask_name + '.tif')
-                self.integerimage = daskread(self.savedir + imagename + self.hair_seg_name + '.tif')
-                self.veinimage = daskread(self.savedir + imagename + self.vein_name + '.tif')
-                self.markerimage = daskread(self.savedir + imagename + self.marker_name + '.tif')
+                self.maskimage = imread(self.savedir + imagename + self.mask_name + '.tif')
+                self.integerimage = imread(self.savedir + imagename + self.hair_seg_name + '.tif')
+                self.markerimage = imread(self.savedir + imagename + self.marker_name + '.tif')
+                self.markerimage = self.markerimage.astype('uint16')
+                self.viewer.add_image(self.image, name= 'Image'+imagename )
                 
-                self.viewer.add_image(self.image, name= 'Image' + imagename )
+                NewMarkerImage = np.zeros(self.markerimage.shape)
+              
+                waterproperties = measure.regionprops(self.markerimage)
                 
-                NewMarkerImage = np.zeros(self.integerimage.shape)
-                waterproperties = measure.regionprops(self.integerimage)
                 Coordinates = [prop.centroid for prop in waterproperties]
+                
                 Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
-                viewer.add_points(data = Coordinates, name= 'Markers', face_color='red', ndim = 2)
+                self.viewer.add_points(data = Coordinates, name='Image'+'Markers' +imagename, face_color='red', ndim = 2)
 
 
                 if save:
 
-                        NewCoordinates = viewer.layers['Markers'].data  
+                        NewCoordinates = self.viewer.layers['Image'+'Markers'].data  
                         NewMarkerImage[tuple(coordinates_int.T)] = 1 + np.arange(len(NewCoordinates))
 
                         markers = morphology.dilation(NewMarkerImage, morphology.disk(2))  
