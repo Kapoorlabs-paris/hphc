@@ -376,36 +376,35 @@ def Remove_label(Label, indices):
     return Label    
 
 
-def MeasureArea(Label,LabelMaskImage, SavedirHair, Name):
+def MeasureArea(Label,LabelMaskImage, SavedirHair, Name, doCompartment = True):
 
-     AllCellCount = Measure(Label, SavedirHair, Name, 'All')
+     AllCellCount, df, densityplot = Measure(Label, SavedirHair, Name, 'All')
      CellCounter = {}
      Collabels = []
      Colarea = []
      Collabels.append('All')
      Colarea.append(AllCellCount)
 
-     plt.imshow(LabelMaskImage)
-     plt.show()
      Labels = [prop.label for prop in measure.regionprops(LabelMaskImage)]
-     
-     for i in range(0,len(Labels)):
-          label = Labels[i]
-          
-          RegionLabel = np.where(LabelMaskImage == label, 1, 0)
-          
-          RegionLabel = np.multiply(Label, RegionLabel )   
-          
-          LabelCellCount = Measure(RegionLabel, SavedirHair, Name, str(label))
-          if LabelCellCount is not None:
-             Collabels.append(str(label))
-             Colarea.append(LabelCellCount)
+     if doCompartment:
+             for i in range(0,len(Labels)):
+                  label = Labels[i]
+
+                  RegionLabel = np.where(LabelMaskImage == label, 1, 0)
+
+                  RegionLabel = np.multiply(Label, RegionLabel )   
+
+                  LabelCellCount = Measure(RegionLabel, SavedirHair, Name, str(label))
+                  if LabelCellCount is not None:
+                     Collabels.append(str(label))
+                     Colarea.append(LabelCellCount)
          
      CellCounter['Labels'] = [Collabels]
      CellCounter['Count'] = [Colarea]
      cellcountdf = pd.DataFrame.from_dict(CellCounter)
      cellcountdf.to_csv(SavedirHair + '/' + Name + 'Cell_Label_Counts' +  '.csv') 
-
+     
+     return df, densityplot 
 
 def Measure(Label, SavedirHair, Name, SaveName):
      regions = measure.regionprops(Label)
@@ -423,10 +422,10 @@ def Measure(Label, SavedirHair, Name, SaveName):
           print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
           densityplot = sns.histplot(df.Area, kde = True)
           densityplot.figure.savefig(SavedirHair + '/' + Name + SaveName +  "Densityplot.png", dpi = 300)
-          plt.show()
+         
           df.to_csv(SavedirHair + '/' + Name + SaveName + 'Area_Stats' +  '.csv')  
           
-          return AllCellCount
+          return AllCellCount, df, densityplot
 
 def polygons_to_label_coord(Y, X, shape, labelindex):
     """renders polygons to image of given shape
