@@ -378,15 +378,16 @@ def Remove_label(Label, indices):
 
 def MeasureArea(Label,LabelMaskImage, SavedirHair, Name, doCompartment = True):
 
-     AllCellCount, df, densityplot = Measure(Label, SavedirHair, Name, 'All')
+     AllCellCount, dfmain, densityplotmain = Measure(Label, SavedirHair, Name, 'All')
      CellCounter = {}
      Collabels = []
      Colarea = []
      Collabels.append('All')
      Colarea.append(AllCellCount)
 
-     Labels = [prop.label for prop in measure.regionprops(LabelMaskImage)]
+     
      if doCompartment:
+             Labels = [prop.label for prop in measure.regionprops(LabelMaskImage.astype('uint16'))]
              for i in range(0,len(Labels)):
                   label = Labels[i]
 
@@ -394,7 +395,7 @@ def MeasureArea(Label,LabelMaskImage, SavedirHair, Name, doCompartment = True):
 
                   RegionLabel = np.multiply(Label, RegionLabel )   
 
-                  LabelCellCount = Measure(RegionLabel, SavedirHair, Name, str(label))
+                  LabelCellCount, df, densityplot  = Measure(RegionLabel, SavedirHair, Name, str(label))
                   if LabelCellCount is not None:
                      Collabels.append(str(label))
                      Colarea.append(LabelCellCount)
@@ -404,7 +405,7 @@ def MeasureArea(Label,LabelMaskImage, SavedirHair, Name, doCompartment = True):
      cellcountdf = pd.DataFrame.from_dict(CellCounter)
      cellcountdf.to_csv(SavedirHair + '/' + Name + 'Cell_Label_Counts' +  '.csv') 
      
-     return df, densityplot 
+     return dfmain
 
 def Measure(Label, SavedirHair, Name, SaveName):
      regions = measure.regionprops(Label)
@@ -421,9 +422,9 @@ def Measure(Label, SavedirHair, Name, SaveName):
      if mean_area > 0:
           print('Mean Area', mean_area, 'Max Area', max_area, 'Max Area Label', max_label)
           densityplot = sns.histplot(df.Area, kde = True)
-          densityplot.figure.savefig(SavedirHair + '/' + Name + SaveName +  "Densityplot.png", dpi = 300)
+          densityplot.figure.savefig(SavedirHair + '/' + Name + SaveName  +  "Densityplot.png", dpi = 300)
          
-          df.to_csv(SavedirHair + '/' + Name + SaveName + 'Area_Stats' +  '.csv')  
+          df.to_csv(SavedirHair + '/' + Name + SaveName  + 'Area_Stats' +  '.csv')  
           
           return AllCellCount, df, densityplot
 

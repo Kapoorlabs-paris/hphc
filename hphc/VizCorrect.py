@@ -40,7 +40,7 @@ Boxname = 'ImageIDBox'
 class VizCorrect(object):
 
         def __init__(self, imagedir, savedir, fileextension = '*tif', hair_seg_name = 'Water', binary_name = 'BinaryWater'
-                        , vein_name = 'Vein', mask_name = 'Mask', marker_name = 'Markers', doCompartment = False):
+                        , vein_name = 'Vein', mask_name = 'Mask', marker_name = 'Markers', doCompartment = False, max_size = 100000):
             
             
                self.imagedir = imagedir
@@ -52,6 +52,7 @@ class VizCorrect(object):
                self.mask_name = mask_name
                self.marker_name = marker_name 
                self.doCompartment = doCompartment 
+               self.max_size = max_size 
                Path(self.savedir).mkdir(exist_ok=True)
                
                
@@ -195,7 +196,7 @@ class VizCorrect(object):
                                      
         def second_image_add(self, image_toread, imagename, compute = False, save = False):
                 
-                if not compute or not save:
+                if not compute and not save:
                         for layer in list(self.viewer.layers):
 
                             if 'Image' in layer.name or layer.name in 'Image':
@@ -207,9 +208,10 @@ class VizCorrect(object):
                         if len(self.image.shape) > 3:
                             self.image = self.image[0,:]
 
-                        self.maskimage = daskread(self.savedir + imagename + self.mask_name + '.tif')
-                        self.integerimage = daskread(self.savedir + imagename + self.hair_seg_name + '.tif')
-                        self.binaryimage = daskread(self.savedir + imagename + self.binary_name + '.tif')
+                        self.maskimage = imread(self.savedir + imagename + self.mask_name + '.tif')
+                        self.integerimage = imread(self.savedir + imagename + self.hair_seg_name + '.tif')
+                        self.integerimage = remove_big_objects(self.integerimage, self.max_size)
+                        self.binaryimage = imread(self.savedir + imagename + self.binary_name + '.tif')
 
 
                         self.viewer.add_image(self.image, name='Image'+imagename)
@@ -223,20 +225,20 @@ class VizCorrect(object):
                     
                     
 
-                    ModifiedArraySeg = viewer.layers['Image'+'Integer_Labels'+imagename].data 
+                    ModifiedArraySeg = self.viewer.layers['Image'+'Integer_Labels'+imagename].data 
                     ModifiedArraySeg = ModifiedArraySeg.astype('uint16')
                     LabelMaskImage = ModifiedArraySeg > 0
                     Compartment = label(LabelMaskImage)
-                    ModifiedArrayMask = viewer.layers['Image'+'Wing_Mask'+imagename].data 
+                    ModifiedArrayMask = self.viewer.layers['Image'+'Wing_Mask'+imagename].data 
                     ModifiedArrayMask = ModifiedArrayMask.astype('uint8')
 
                   
                     
-                    self.dataset, densityplot = MeasureArea(Compartment,LabelMaskImage, self.savedir, imagename, self.doCompartment)
+                    self.dataset = MeasureArea(ModifiedArraySeg,LabelMaskImage, self.savedir, imagename, self.doCompartment)
                     self.dataset_index = self.dataset.index
                     self.ax.cla()
                     
-                    self.ax.plt.hist(self.dataset.Area, density = True)
+                    self.ax.plot.hist(self.dataset.Area, density = True)
                     self.ax.set_title(imagename + "Size")
                     self.ax.set_xlabel("Time")
                     self.ax.set_ylabel("Counts")
@@ -245,11 +247,11 @@ class VizCorrect(object):
 
                 if save:
 
-                        ModifiedArraySeg = viewer.layers['Image'+'Integer_Labels' + imagename].data 
+                        ModifiedArraySeg = self.viewer.layers['Image'+'Integer_Labels' + imagename].data 
                         ModifiedArraySeg = ModifiedArraySeg.astype('uint16')
                         LabelMaskImage = ModifiedArraySeg > 0
                         Compartment = label(LabelMaskImage)
-                        ModifiedArrayMask = viewer.layers['Image'+'Wing_Mask'+imagename].data 
+                        ModifiedArrayMask = self.viewer.layers['Image'+'Wing_Mask'+imagename].data 
                         ModifiedArrayMask = ModifiedArrayMask.astype('uint8')
 
                         BinaryImage = Integer_to_border(ModifiedArraySeg)
@@ -275,6 +277,7 @@ class VizCorrect(object):
 
                         self.maskimage = imread(self.savedir + imagename + self.mask_name + '.tif')
                         self.integerimage = imread(self.savedir + imagename + self.hair_seg_name + '.tif')
+                        self.integerimage = remove_big_objects(self.integerimage, self.max_size)
                         self.markerimage = imread(self.savedir + imagename + self.marker_name + '.tif')
                         self.markerimage = self.markerimage.astype('uint16')
                         self.viewer.add_image(self.image, name= 'Image'+imagename )
@@ -317,3 +320,24 @@ def GetMarkers(image):
     markers = morphology.dilation(MarkerImage, morphology.disk(2))        
    
     return markers 
+
+
+def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
+    
+    out = ar.copy()
+    ccs = out
+
+    try:
+        component_sizes = np.bincount(ccs.ravel())
+    except ValueError:
+        raise ValueError("Negative value labels are not supported. Try "
+                         "relabeling the input with `scipy.ndimage.label` or "
+                         "`skimage.morphology.label`.")
+
+
+
+    too_big = component_sizes > max_size
+    too_big_mask = too_big[ccs]
+    out[too_big_mask] = 0
+
+    return out
