@@ -352,7 +352,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             imwrite(Savedir + Name + 'Mask' + '.tif', LabelMaskimage.astype('uint16'))
             imwrite(Savedir + Name + 'Vein' +  '.tif', Veinimage.astype('uint16'))
             imwrite(Savedir + Name + 'Hair' +  '.tif', Hairimage.astype('uint16'))
-            
+            imwrite(Savedir + Name + 'Markers' +  '.tif', markers)
 
 
         

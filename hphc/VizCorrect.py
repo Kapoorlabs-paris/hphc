@@ -69,13 +69,13 @@ class VizCorrect(object):
                  
                  for imagename in X:
                      Imageids.append(imagename)
-                 
+                     
                  
                 
                     
                  imageidbox = QComboBox()   
                  imageidbox.addItem(Boxname)   
-                 measurestatsbutton = QPushButton(' Compute Statistics')
+                 measurestatsbutton = QPushButton(' Measure Stats')
                  savebutton = QPushButton(' Save Images')
                     
                  for i in range(0, len(Imageids)):
@@ -145,7 +145,7 @@ class VizCorrect(object):
                  
                  for imagename in X:
                      Imageids.append(imagename)
-                 
+                     print(imagename)
                  
                 
                     
@@ -185,8 +185,8 @@ class VizCorrect(object):
                 )
             )   
                  
-                 self.viewer.window.add_dock_widget(imageidbox, name="Image", area='left') 
-                 self.viewer.window.add_dock_widget(detectionsavebutton, name="Save Corrections", area='left')  
+                 self.viewer.window.add_dock_widget(imageidbox, name="Image", area='bottom') 
+                 self.viewer.window.add_dock_widget(detectionsavebutton, name="Save Corrections", area='bottom')  
                  
                  
                         
@@ -196,8 +196,9 @@ class VizCorrect(object):
         def second_image_add(self, image_toread, imagename, compute = False, save = False):
                                     
                 for layer in list(self.viewer.layers):
-                                         if 'Image' in layer.name or layer.name in 'Image':
-                                                    self.viewer.layers.remove(layer)
+                                         self.viewer.layers.remove(layer)
+                                
+                                
                 self.image = daskread(image_toread)
                 if len(self.image.shape) > 3:
                     self.image = self.image[0,:]
@@ -208,26 +209,20 @@ class VizCorrect(object):
                 
                 
                 self.viewer.add_image(self.image, name= 'Image' + imagename )
-                self.viewer.add_labels(self.integerimage, name = 'Integer_Labels')
+                self.viewer.add_labels(self.integerimage, name =  'Integer_Labels' + imagename)
 
-                self.viewer.add_labels(self.binaryimage, name = 'Binary_Segmentation')
-                self.viewer.add_labels(self.maskimage, name = 'Wing_Mask')
+                self.viewer.add_labels(self.binaryimage, name = 'Binary_Segmentation' + imagename)
+                self.viewer.add_labels(self.maskimage, name = 'Wing_Mask' + imagename)
                 
                 
                 if compute:
                     
                     
-                    ModifiedArraySeg = viewer.layers['Integer_Labels'].data 
-                    ModifiedArraySeg = ModifiedArraySeg.astype('uint16')
-                    LabelMaskImage = ModifiedArraySeg > 0
-                    Compartment = label(LabelMaskImage)
-                    ModifiedArrayMask = viewer.layers['Wing_Mask'].data 
-                    ModifiedArrayMask = ModifiedArrayMask.astype('uint8')
 
-                    BinaryImage = Integer_to_border(ModifiedArraySeg)
+                    BinaryImage = self.binaryimage #Integer_to_border(ModifiedArraySeg)
                     
                     self.dataset, densityplot = MeasureArea(Compartment,LabelMaskImage, self.savedir, imagename, self.doCompartment)
-
+                    print(self.dataset) 
                     self.dataset_index = self.dataset.index
                     self.ax.cla()
                     
@@ -240,11 +235,11 @@ class VizCorrect(object):
 
                 if save:
 
-                        ModifiedArraySeg = viewer.layers['Integer_Labels'].data 
+                        ModifiedArraySeg = viewer.layers['Integer_Labels' + imagename].data 
                         ModifiedArraySeg = ModifiedArraySeg.astype('uint16')
                         LabelMaskImage = ModifiedArraySeg > 0
                         Compartment = label(LabelMaskImage)
-                        ModifiedArrayMask = viewer.layers['Wing_Mask'].data 
+                        ModifiedArrayMask = viewer.layers['Wing_Mask'+ imagename].data 
                         ModifiedArrayMask = ModifiedArrayMask.astype('uint8')
 
                         BinaryImage = Integer_to_border(ModifiedArraySeg)
@@ -258,7 +253,7 @@ class VizCorrect(object):
         def image_add(self, image_toread, imagename, save = False):
                                     
                 for layer in list(self.viewer.layers):
-                                         if 'Image' in layer.name or layer.name in 'Image':
+                                         if imagename in layer.name or layer.name in imagename:
                                                     self.viewer.layers.remove(layer)
                 self.image = daskread(image_toread)
                 if len(self.image.shape) > 3:
@@ -268,7 +263,6 @@ class VizCorrect(object):
                 self.integerimage = daskread(self.savedir + imagename + self.hair_seg_name + '.tif')
                 self.veinimage = daskread(self.savedir + imagename + self.vein_name + '.tif')
                 self.markerimage = daskread(self.savedir + imagename + self.marker_name + '.tif')
-                
                 
                 self.viewer.add_image(self.image, name= 'Image' + imagename )
                 
