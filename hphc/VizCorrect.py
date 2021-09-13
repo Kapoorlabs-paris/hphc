@@ -238,7 +238,7 @@ class VizCorrect(object):
                     self.dataset_index = self.dataset.index
                     self.ax.cla()
                     
-                    self.ax.plot.hist(self.dataset.Area, density = True)
+                    self.ax.hist(self.dataset.Area, density = True)
                     self.ax.set_title(imagename + "Size")
                     self.ax.set_xlabel("Time")
                     self.ax.set_ylabel("Counts")
@@ -289,7 +289,7 @@ class VizCorrect(object):
                         Coordinates = [prop.centroid for prop in waterproperties]
 
                         Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
-                        self.viewer.add_points(data = Coordinates, name='Image'+'Markers' +imagename, face_color='red', ndim = 2)
+                        self.viewer.add_points(data = Coordinates, name='Image'+'Markers' +imagename, face_color= [0]*4, edge_color = "red", ndim = 2)
 
 
                 if save:
