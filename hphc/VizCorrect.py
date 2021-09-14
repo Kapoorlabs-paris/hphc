@@ -257,9 +257,9 @@ class VizCorrect(object):
 
                         BinaryImage = Integer_to_border(ModifiedArraySeg)
 
-                        imwrite((Resultsdir  +   Name + self.hair_seg_name + '.tif' ) , ModifiedArraySeg) 
-                        imwrite((Resultsdir  +   Name + self.binary_name + '.tif' ) , BinaryImage)
-                        imwrite((Resultsdir  +   Name + self.mask_name + '.tif' ) , MaskImage)
+                        imwrite((self.savedir  +   imagename + self.hair_seg_name + '.tif' ) , ModifiedArraySeg)
+                        imwrite((self.savedir  +   imagename + self.binary_name + '.tif' ) , BinaryImage)
+                        imwrite((self.savedir  +   imagename + self.mask_name + '.tif' ) , ModifiedArrayMask)
 
                                                   
             
