@@ -156,8 +156,46 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize 
     Labelimage = Remove_label(Labelimage, maskindices) 
     CopyMask = Labelimage > 0 
      
-    return Labelimage, binary, markers, CopyMask, filledborder  
-    
+    return Labelimage, binary, markers, CopyMask, filledborder
+
+
+def DistWaterPost(image, Coordinates, Mask, VeinMask, maskindices, maxsize=1.0E308):
+    # distance = ndi.distance_transform_edt(np.logical_not(image))
+
+    Mask = np.subtract(Mask, VeinMask, dtype=np.float32)
+
+    Mask = binary_erosion(Mask, iterations=4)
+
+    image[maskindices] = 0
+    Coordinates = np.asarray(Coordinates)
+    coordinates_int = np.round(Coordinates).astype(int)
+    markers_raw = np.zeros(image.shape)
+    markers_raw[tuple(coordinates_int.T)] = 1 + np.arange(len(Coordinates))
+
+    markers = morphology.dilation(markers_raw, morphology.disk(2))
+
+    Labelimage = watershed(image, markers)
+
+    binary = Integer_to_border(Labelimage.copy().astype('uint16'))
+
+    filledbinary = binary_fill_holes(binary)
+    filledborder = find_boundaries(filledbinary)
+
+    binary[maskindices] = 0
+    Labelimage[maskindices] = 0
+
+    binarylabel = label(invert(binary_dilation(binary)))
+
+    binarylabel = remove_big_objects(binarylabel, maxsize)
+
+    binarylabel = expand_labels(binarylabel, distance=4)
+    binary = find_boundaries(binarylabel)
+    binary = binary > 0
+    Labelimage = Remove_label(Labelimage, maskindices)
+    CopyMask = Labelimage > 0
+
+    return Labelimage, binary, markers, CopyMask, filledborder
+
 
 def voronoi_finite_polygons_2d(vor, indices, maskindices, radius=None):
     """
@@ -264,19 +302,20 @@ def remove_big_objects(ar, max_size=6400, connectivity=1, in_place=False):
     return out          
 
 
-def AfterUNET(Hairimage, Coordinates, Maskimage, Veinimage):
-    
-            Labelimage = np.zeros(Hairimage.shape)
-            Veinimagecopy = Veinimage.copy()
-            indices = np.where(Veinimagecopy > 0)
-            
-            Maskimagecopy = Maskimage.copy()
-            maskindices = np.where(Maskimagecopy == 0)
-            Hairimage[maskindices] = 0
-         
-            distlabel, distbinary, markers, Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
-            
-            return distlabel, distbinary
+def AfterUNET(Hairimage, Coordinates, Maskimage, Veinimage, maxsize):
+
+    Labelimage = np.zeros(Hairimage.shape)
+    Veinimagecopy = Veinimage.copy()
+    indices = np.where(Veinimagecopy > 0)
+    Hairimage[indices] = 0
+
+    Maskimagecopy = Maskimage.copy()
+    maskindices = np.where(Maskimagecopy == 0)
+    Hairimage[maskindices] = 0
+
+    distlabel, distbinary, markers, Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
+    distlabel = remove_big_objects(distlabel, maxsize)
+    return distlabel, distbinary
 
 def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Savedir,  n_tiles, axis,min_size = 10000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000, dostats = False):
 
@@ -307,7 +346,8 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             Veinimagecopy = Veinimage.copy()
             indices = np.where(Veinimagecopy > 0)
             Hairimage[indices] = 0
-            
+
+
             Maskimagecopy = Maskimage.copy()
             maskindices = np.where(Maskimagecopy == 0)
             Hairimage[maskindices] = 0
@@ -327,31 +367,22 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
             Maskimage[np.where(Maskimage > 0)] = 255
             Hairimage = np.logical_xor(Maskimage, Hairimage)
             Hairimage = np.logical_xor(Hairimage , Veinimage)
-
+            CopyHairimage = Hairimage.copy()
             distlabel, distbinary, markers, Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices, maxsize)
-            distlabel = remove_big_objects(distlabel, maxsize)
+            distlabel = label(invert(binary_dilation(distbinary)))
             
-            LabelMaskimage = label(distlabel > 0)
-            LabelMaskimage = remove_small_objects(LabelMaskimage, min_size)
-            regions = measure.regionprops(LabelMaskimage)
-            regions = sorted(regions, key= lambda r:r.area, reverse = True)
-            relabel = 1
-            for region in regions:
-                indices = np.where(LabelMaskimage == region.label)
-                LabelMaskimage[indices] = relabel
-                relabel = relabel + 1
-           
+
+
 
             if dostats:
-               MeasureArea(distlabel, LabelMaskimage, SavedirHair, Name)
+               MeasureArea(distlabel, distlabel, Savedir, Name)
               
             if count%show_after == 0:
                    doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
             imwrite(Savedir + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
-            imwrite(Savedir + Name + 'Water' + '.tif', distlabel.astype('uint16'))
-            imwrite(Savedir + Name + 'Mask' + '.tif', LabelMaskimage.astype('uint16'))
             imwrite(Savedir + Name + 'Vein' +  '.tif', Veinimage.astype('uint16'))
-            imwrite(Savedir + Name + 'Hair' +  '.tif', Hairimage.astype('uint16'))
+            imwrite(Savedir + Name + 'Hair' +  '.tif', CopyHairimage.astype('uint16'))
+            imwrite(Savedir + Name + 'Mask' + '.tif', Maskimage.astype('uint16'))
             imwrite(Savedir + Name + 'Markers' +  '.tif', markers)
 
 

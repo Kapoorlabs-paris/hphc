@@ -22,37 +22,41 @@ from matplotlib.backends.backend_qt5agg import \
     FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from qtpy.QtCore import Qt
+from scipy.ndimage.morphology import  binary_dilation, binary_erosion
 from qtpy.QtWidgets import QComboBox, QPushButton, QSlider
 import h5py
-from hphc.helpers import AfterUNET, Integer_to_border, MeasureArea, DistWater
+from hphc.helpers import AfterUNET, Integer_to_border, MeasureArea, DistWater, expand_labels, fill_label_holes
 from tifffile import imread, imwrite
 import pandas as pd
 import imageio
 from tqdm import tqdm
 import seaborn as sns
+from skimage import morphology
 from skimage import measure
 from skimage.measure import label
 from dask.array.image import imread as daskread
+from skimage.util import invert
 Boxname = 'ImageIDBox'
 
 
 
 class VizCorrect(object):
 
-        def __init__(self, imagedir, savedir, fileextension = '*tif', hair_seg_name = 'Water', binary_name = 'BinaryWater'
-                        , vein_name = 'Vein', mask_name = 'Mask', marker_name = 'Markers', doCompartment = False, max_size = 100000):
+        def __init__(self, imagedir, savedir, fileextension = '*tif', hair_name = 'Hair', mask_name = 'Mask', binary_name = 'BinaryWater'
+                        , vein_name = 'Vein',  marker_name = 'Markers', doCompartment = False, max_size = 100000):
             
             
                self.imagedir = imagedir
                self.savedir = savedir
                self.fileextension = fileextension
-               self.hair_seg_name = hair_seg_name
                self.binary_name = binary_name
                self.vein_name = vein_name
                self.mask_name = mask_name
-               self.marker_name = marker_name 
+               self.marker_name = marker_name
+               self.hair_name = hair_name
                self.doCompartment = doCompartment 
-               self.max_size = max_size 
+               self.max_size = max_size
+
                Path(self.savedir).mkdir(exist_ok=True)
                
                
@@ -208,12 +212,13 @@ class VizCorrect(object):
                         if len(self.image.shape) > 3:
                             self.image = self.image[0,:]
 
-                        self.maskimage = imread(self.savedir + imagename + self.mask_name + '.tif')
-                        self.integerimage = imread(self.savedir + imagename + self.hair_seg_name + '.tif')
-                        self.integerimage = remove_big_objects(self.integerimage, self.max_size)
+                        self.hairimage = imread(self.savedir + imagename + self.hair_name + '.tif')
                         self.binaryimage = imread(self.savedir + imagename + self.binary_name + '.tif')
+                        self.integerimage =  label(invert(binary_dilation(self.binaryimage)))
+                        self.integerimage = remove_big_objects(self.integerimage, self.max_size)
 
 
+                        self.maskimage =  imread(self.savedir + imagename + self.mask_name + '.tif')
                         self.viewer.add_image(self.image, name='Image'+imagename)
                         self.viewer.add_labels(self.integerimage, name ='Image'+'Integer_Labels'+imagename)
 
@@ -248,16 +253,18 @@ class VizCorrect(object):
 
                 if save:
 
+
                         ModifiedArraySeg = self.viewer.layers['Image'+'Integer_Labels' + imagename].data 
                         ModifiedArraySeg = ModifiedArraySeg.astype('uint16')
                         LabelMaskImage = ModifiedArraySeg > 0
                         Compartment = label(LabelMaskImage)
-                        ModifiedArrayMask = self.viewer.layers['Image'+'Wing_Mask'+imagename].data 
+                        ModifiedArrayMask = self.viewer.layers['Image'+'Wing_Mask'+imagename].data
                         ModifiedArrayMask = ModifiedArrayMask.astype('uint8')
 
-                        BinaryImage = Integer_to_border(ModifiedArraySeg)
+                        ModifiedArrayBinary = self.viewer.layers['Image'+'Binary_Segmentation'+ imagename].data
+                        ModifiedArrayBinary = ModifiedArrayBinary.astype('uint8')
+                        BinaryImage = ModifiedArrayBinary
 
-                        imwrite((self.savedir  +   imagename + self.hair_seg_name + '.tif' ) , ModifiedArraySeg)
                         imwrite((self.savedir  +   imagename + self.binary_name + '.tif' ) , BinaryImage)
                         imwrite((self.savedir  +   imagename + self.mask_name + '.tif' ) , ModifiedArrayMask)
 
@@ -276,11 +283,16 @@ class VizCorrect(object):
                         if len(self.image.shape) > 3:
                             self.image = self.image[0,:]
 
-                        self.maskimage = imread(self.savedir + imagename + self.mask_name + '.tif')
-                        self.integerimage = imread(self.savedir + imagename + self.hair_seg_name + '.tif')
-                        self.integerimage = remove_big_objects(self.integerimage, self.max_size)
+                        self.binaryimage = imread(self.savedir + imagename + self.binary_name + '.tif')
                         self.markerimage = imread(self.savedir + imagename + self.marker_name + '.tif')
+                        self.veinimage = imread(self.savedir + imagename + self.vein_name + '.tif')
+                        self.integerimage = label(invert(binary_dilation(self.binaryimage)))
+
+
                         self.markerimage = self.markerimage.astype('uint16')
+                        self.hairimage = imread(self.savedir + imagename + self.hair_name + '.tif')
+
+                        self.maskimage = imread(self.savedir + imagename + self.mask_name + '.tif')
                         self.viewer.add_image(self.image, name= 'Image'+imagename )
 
                         NewMarkerImage = np.zeros(self.markerimage.shape)
@@ -290,32 +302,40 @@ class VizCorrect(object):
                         Coordinates = [prop.centroid for prop in waterproperties]
 
                         Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
-                        self.viewer.add_points(data = Coordinates, name='Image'+'Markers' +imagename, face_color= [0]*4, edge_color = "red", ndim = 2)
+                        self.viewer.add_points(data = Coordinates, name='Image'+'Markers'+imagename, face_color= [0]*4, edge_color = "red", ndim = 2)
 
 
                 if save:
 
-                        NewCoordinates = self.viewer.layers['Image'+'Markers'].data  
+                        NewCoordinates = self.viewer.layers['Image'+'Markers'+imagename].data
+
+                        coordinates_int = np.round(NewCoordinates).astype(int)
+                        NewMarkerImage = np.zeros(self.markerimage.shape)
                         NewMarkerImage[tuple(coordinates_int.T)] = 1 + np.arange(len(NewCoordinates))
 
-                        markers = morphology.dilation(NewMarkerImage, morphology.disk(2))  
-
+                        markers = morphology.dilation(NewMarkerImage, morphology.disk(2))
+                        Hairimage = np.zeros(self.hairimage.shape)
+                        Hairimage[np.where(self.markerimage > 0)] = 127
+                        self.maskimage[np.where(self.maskimage > 0)] = 255
+                        Hairimage = np.logical_xor(self.maskimage, Hairimage)
+                        Hairimage = np.logical_xor(Hairimage, self.veinimage)
                         #Redo Watershed                     
-                        WaterImage, BinaryImage = AfterUNET(self.integerimage > 0, NewCoordinates, self.maskimage, self.veinimage) 
+                        WaterImage, BinaryImage = AfterUNET(Hairimage, NewCoordinates, self.maskimage, self.veinimage, self.max_size)
+                        WaterImage = label(invert(binary_dilation(BinaryImage)))
+                        imwrite((self.savedir  +   imagename + self.marker_name + '.tif' ) , markers)
 
-                        imwrite((Resultsdir  +   Name + self.marker_name + '.tif' ) , markers) 
-                        imwrite((Resultsdir  +   Name + self.hair_seg_name +  '.tif' ) , WaterImage) 
-                        imwrite((Resultsdir  +   Name + self.binary_name + '.tif' ) , BinaryImage)
+                        imwrite((self.savedir  +   imagename + self.binary_name +  '.tif' ) , BinaryImage)
                                                     
                 
                 
 def GetMarkers(image):
     
     
-    MarkerImage = np.zeros([MarkerImage.shape])
+    MarkerImage = np.zeros([image.shape])
     waterproperties = measure.regionprops(image)                
     Coordinates = [prop.centroid for prop in waterproperties]
     Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
+    coordinates_int = np.round(Coordinates).astype(int)
     MarkerImage[tuple(coordinates_int.T)] = 1 + np.arange(len(Coordinates))
 
     markers = morphology.dilation(MarkerImage, morphology.disk(2))        
