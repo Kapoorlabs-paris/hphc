@@ -43,7 +43,7 @@ Boxname = 'ImageIDBox'
 class VizCorrect(object):
 
         def __init__(self, imagedir, savedir, fileextension = '*tif', hair_name = 'Hair', mask_name = 'Mask', binary_name = 'BinaryWater'
-                        , vein_name = 'Vein',  marker_name = 'Markers', doCompartment = False, max_size = 100000):
+                        , vein_name = 'Vein',  marker_name = 'Markers', calibrationX = 1, calibrationY = 1, doCompartment = False, max_size = 100000):
             
             
                self.imagedir = imagedir
@@ -56,7 +56,8 @@ class VizCorrect(object):
                self.hair_name = hair_name
                self.doCompartment = doCompartment 
                self.max_size = max_size
-
+               self.calibrationX = calibrationX
+               self.calibrationY = calibrationY 
                Path(self.savedir).mkdir(exist_ok=True)
                
                
@@ -239,7 +240,7 @@ class VizCorrect(object):
 
                   
                     
-                    self.dataset = MeasureArea(ModifiedArraySeg,LabelMaskImage, self.savedir, imagename, self.doCompartment)
+                    self.dataset = MeasureArea(ModifiedArraySeg,LabelMaskImage, self.savedir, imagename, self.calibrationX, self.calibrationY, self.doCompartment)
                     self.dataset_index = self.dataset.index
                     self.ax.cla()
                     

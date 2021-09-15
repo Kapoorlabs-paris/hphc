@@ -317,7 +317,7 @@ def AfterUNET(Hairimage, Coordinates, Maskimage, Veinimage, maxsize):
     distlabel = remove_big_objects(distlabel, maxsize)
     return distlabel, distbinary
 
-def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Savedir,  n_tiles, axis,min_size = 10000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000, dostats = False):
+def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Savedir,  n_tiles, axis, calibrationX = 1, calibrationY = 1, min_size = 10000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000, dostats = False):
 
 
     count = 0
@@ -375,7 +375,7 @@ def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Sa
 
 
             if dostats:
-               MeasureArea(distlabel, distlabel, Savedir, Name)
+               MeasureArea(distlabel, distlabel, Savedir, Name, calibrationX, calibrationY)
               
             if count%show_after == 0:
                    doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
@@ -407,9 +407,9 @@ def Remove_label(Label, indices):
     return Label    
 
 
-def MeasureArea(Label,LabelMaskImage, SavedirHair, Name, doCompartment = True):
+def MeasureArea(Label,LabelMaskImage, SavedirHair, Name, calibrationX, calibrationY, doCompartment = True):
 
-     AllCellCount, dfmain, densityplotmain = Measure(Label, SavedirHair, Name, 'All')
+     AllCellCount, dfmain, densityplotmain = Measure(Label, SavedirHair, Name, 'All', calibrationX, calibrationY)
      CellCounter = {}
      Collabels = []
      Colarea = []
@@ -426,7 +426,7 @@ def MeasureArea(Label,LabelMaskImage, SavedirHair, Name, doCompartment = True):
 
                   RegionLabel = np.multiply(Label, RegionLabel )   
 
-                  LabelCellCount, df, densityplot  = Measure(RegionLabel, SavedirHair, Name, str(label))
+                  LabelCellCount, df, densityplot  = Measure(RegionLabel, SavedirHair, Name, str(label), calibrationX, calibrationY)
                   if LabelCellCount is not None:
                      Collabels.append(str(label))
                      Colarea.append(LabelCellCount)
@@ -438,9 +438,9 @@ def MeasureArea(Label,LabelMaskImage, SavedirHair, Name, doCompartment = True):
      
      return dfmain
 
-def Measure(Label, SavedirHair, Name, SaveName):
+def Measure(Label, SavedirHair, Name, SaveName, calibrationX, calibrationY):
      regions = measure.regionprops(Label)
-     areas = [int(regions[i].area) for i in range(len(regions))]
+     areas = [int(regions[i].area * calibrationX * calibrationY) for i in range(len(regions))]
      labels = [int(regions[i].label) for i in range(len(regions))]
      AllCellCount = len(labels)
      df = pd.DataFrame(list(zip(labels,areas)), 
