@@ -245,7 +245,7 @@ class VizCorrect(object):
                     self.ax.cla()
                     
                     sns.histplot(self.dataset.Area, kde = True, ax = self.ax)
-                    #self.ax.hist(self.dataset.Area, density = True)
+                
                     self.ax.set_title(imagename + "Size")
                     self.ax.set_xlabel("Time")
                     self.ax.set_ylabel("Counts")
@@ -321,7 +321,9 @@ class VizCorrect(object):
                         Hairimage = np.logical_xor(self.maskimage, Hairimage)
                         Hairimage = np.logical_xor(Hairimage, self.veinimage)
                         #Redo Watershed                     
-                        WaterImage, BinaryImage = AfterUNET(Hairimage, NewCoordinates, self.maskimage, self.veinimage, self.max_size)
+                        WaterImage, BinaryImage = AfterUNET(self.hairimage, NewCoordinates, self.maskimage, self.veinimage, self.max_size)
+                        
+                        
                         WaterImage = label(invert(binary_dilation(BinaryImage)))
                         imwrite((self.savedir  +   imagename + self.marker_name + '.tif' ) , markers)
 
