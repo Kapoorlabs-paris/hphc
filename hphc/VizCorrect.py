@@ -25,6 +25,7 @@ from qtpy.QtCore import Qt
 from scipy.ndimage.morphology import  binary_dilation, binary_erosion
 from qtpy.QtWidgets import QComboBox, QPushButton, QSlider
 import h5py
+from scipy import ndimage, misc
 from hphc.helpers import AfterUNET, Integer_to_border, MeasureArea, DistWater, expand_labels, fill_label_holes
 from tifffile import imread, imwrite
 import pandas as pd
@@ -315,17 +316,24 @@ class VizCorrect(object):
                         NewMarkerImage[tuple(coordinates_int.T)] = 1 + np.arange(len(NewCoordinates))
 
                         markers = morphology.dilation(NewMarkerImage, morphology.disk(2))
+                        
+                        #Redo Watershed                     
                         Hairimage = np.zeros(self.hairimage.shape)
+                        
                         Hairimage[np.where(self.markerimage > 0)] = 127
-                        self.maskimage[np.where(self.maskimage > 0)] = 255
-                        Hairimage = np.logical_xor(self.maskimage, Hairimage)
+                        self.maskimage = fill_label_holes(self.maskimage)
+                        maskimagecopy = self.maskimage > 0
+                        maskimagecopy = binary_dilation(maskimagecopy, iterations = 10)
+                        
+                        maskimagecopy[np.where(maskimagecopy > 0)] = 255
+                        Hairimage = np.logical_xor(maskimagecopy, Hairimage)
                         Hairimage = np.logical_xor(Hairimage, self.veinimage)
                         #Redo Watershed                     
-                        WaterImage, BinaryImage = AfterUNET(self.hairimage, NewCoordinates, self.maskimage, self.veinimage, self.max_size)
+                        WaterImage, BinaryImage = AfterUNET(Hairimage, NewCoordinates, label(maskimagecopy), self.veinimage, self.max_size)
                         
                         
                         WaterImage = label(invert(binary_dilation(BinaryImage)))
-                        imwrite((self.savedir  +   imagename + self.marker_name + '.tif' ) , markers)
+                        imwrite((self.savedir  +   imagename + self.marker_name + '.tif' ) , markers.astype('float32'))
 
                         imwrite((self.savedir  +   imagename + self.binary_name +  '.tif' ) , BinaryImage)
                                                     

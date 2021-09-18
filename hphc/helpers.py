@@ -115,7 +115,7 @@ def intersection(lst1, lst2):
     return lst3
 
 
-def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize = 1.0E308):
+def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize = 1.0E308, expand = 4):
 
     #distance = ndi.distance_transform_edt(np.logical_not(image))
 
@@ -149,7 +149,7 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize 
     
     binarylabel = remove_big_objects(binarylabel, maxsize )
     
-    binarylabel = expand_labels(binarylabel, distance = 4)
+    binarylabel = expand_labels(binarylabel, distance = expand)
     binary = find_boundaries(binarylabel)
     binary = binary > 0
     Labelimage = Remove_label(Labelimage, indices)
@@ -159,41 +159,42 @@ def DistWater(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize 
     return Labelimage, binary, markers, CopyMask, filledborder
 
 
-def DistWaterPost(image, Coordinates, Mask, VeinMask, maskindices, maxsize=1.0E308):
-    # distance = ndi.distance_transform_edt(np.logical_not(image))
+def DistWaterPost(image, Coordinates, Mask, VeinMask, indices, maskindices, maxsize = 1.0E308):
 
-    Mask = np.subtract(Mask, VeinMask, dtype=np.float32)
 
-    Mask = binary_erosion(Mask, iterations=4)
-
+    
+    image[indices] = 0 
     image[maskindices] = 0
     Coordinates = np.asarray(Coordinates)
     coordinates_int = np.round(Coordinates).astype(int)
-    markers_raw = np.zeros(image.shape)
+    markers_raw = np.zeros(image.shape)  
     markers_raw[tuple(coordinates_int.T)] = 1 + np.arange(len(Coordinates))
 
     markers = morphology.dilation(markers_raw, morphology.disk(2))
-
+  
     Labelimage = watershed(image, markers)
-
+    
     binary = Integer_to_border(Labelimage.copy().astype('uint16'))
-
+    
     filledbinary = binary_fill_holes(binary)
     filledborder = find_boundaries(filledbinary)
-
+ 
+    binary[indices] = 0 
     binary[maskindices] = 0
+    Labelimage[indices] = 0
     Labelimage[maskindices] = 0
 
     binarylabel = label(invert(binary_dilation(binary)))
-
-    binarylabel = remove_big_objects(binarylabel, maxsize)
-
-    binarylabel = expand_labels(binarylabel, distance=4)
+    
+    binarylabel = remove_big_objects(binarylabel, maxsize )
+    
+    binarylabel = expand_labels(binarylabel, distance = 4)
     binary = find_boundaries(binarylabel)
     binary = binary > 0
-    Labelimage = Remove_label(Labelimage, maskindices)
-    CopyMask = Labelimage > 0
-
+    Labelimage = Remove_label(Labelimage, indices)
+    Labelimage = Remove_label(Labelimage, maskindices) 
+    CopyMask = Labelimage > 0 
+     
     return Labelimage, binary, markers, CopyMask, filledborder
 
 
@@ -313,7 +314,7 @@ def AfterUNET(Hairimage, Coordinates, Maskimage, Veinimage, maxsize):
     maskindices = np.where(Maskimagecopy == 0)
     Hairimage[maskindices] = 0
 
-    distlabel, distbinary, markers, Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices)
+    distlabel, distbinary, markers, Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices, expand = 5)
     distlabel = remove_big_objects(distlabel, maxsize)
     return distlabel, distbinary
 
