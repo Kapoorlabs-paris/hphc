@@ -318,6 +318,74 @@ def AfterUNET(Hairimage, Coordinates, Maskimage, Veinimage, maxsize):
     distlabel = remove_big_objects(distlabel, maxsize)
     return distlabel, distbinary
 
+
+
+def HairVeinPrediction(Maxdir, Avgdir,  modelVein, modelHair, Savedir,  n_tiles, axis, calibrationX = 1, calibrationY = 1, min_size = 10000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000, dostats = False):
+
+
+    count = 0
+    Path(Savedir).mkdir(exist_ok=True)
+    Raw_path = os.path.join(Maxdir, '*tif') 
+    filesRaw = glob.glob(Raw_path)
+    
+    
+    for fname in filesRaw:
+            count = count + 1
+            
+            Name = os.path.basename(os.path.splitext(fname)[0])
+            maximage = imread(fname)
+            avgimage = imread(Avgdir + "/" + Name + '.tif')
+            Maskimage = BadSegmentation(maximage, min_size = min_size, sigma = sigma)
+            
+            
+            Hairimage = Segment(maximage, modelHair, axis, n_tiles, show_after =  show_after)
+            Veinimage = Segment(avgimage, modelVein, axis, n_tiles, show_after =  show_after)
+
+            BinaryVeinimage = Integer_to_border(Veinimage.astype('uint16'))
+
+            Labelimage = np.zeros(Hairimage.shape)
+            Veinimagecopy = Veinimage.copy()
+            indices = np.where(Veinimagecopy > 0)
+            Hairimage[indices] = 0
+
+
+            Maskimagecopy = Maskimage.copy()
+            maskindices = np.where(Maskimagecopy == 0)
+            Hairimage[maskindices] = 0
+           
+            
+            if count%show_after == 0:
+                    doubleplot(Veinimage, Hairimage, "Vein", "Hair")
+                    doubleplot(maximage, Maskimage, "Original", "Mask")
+                    
+            LabelHairimage = label(Hairimage)
+            waterproperties = measure.regionprops(LabelHairimage, LabelHairimage)
+            Coordinates = [prop.centroid for prop in waterproperties]
+            Coordinates = sorted(Coordinates , key=lambda k: [k[0], k[1]])
+            
+            
+            Hairimage[np.where(Hairimage > 0)] = 127
+            Maskimage[np.where(Maskimage > 0)] = 255
+            Hairimage = np.logical_xor(Maskimage, Hairimage)
+            Hairimage = np.logical_xor(Hairimage , Veinimage)
+            CopyHairimage = Hairimage.copy()
+            distlabel, distbinary, markers, Maskimage, filledborder = DistWater(Hairimage, Coordinates, Maskimage, Veinimage, indices, maskindices, maxsize)
+            distlabel = label(invert(binary_dilation(distbinary)))
+            
+
+
+
+            if dostats:
+               MeasureArea(distlabel, distlabel, Savedir, Name, calibrationX, calibrationY)
+              
+            if count%show_after == 0:
+                   doubleplot(distlabel, distbinary, "Label Water", "Binary Water")
+            imwrite(Savedir + Name + 'BinaryWater' + '.tif', distbinary.astype('uint8'))
+            imwrite(Savedir + Name + 'Vein' +  '.tif', Veinimage.astype('uint16'))
+            imwrite(Savedir + Name + 'Hair' +  '.tif', CopyHairimage.astype('uint16'))
+            imwrite(Savedir + Name + 'Mask' + '.tif', Maskimage.astype('uint16'))
+            imwrite(Savedir + Name + 'Markers' +  '.tif', markers)
+
 def ProjUNETPrediction(filesRaw, modelVein, modelHair, SavedirMax, SavedirAvg,Savedir,  n_tiles, axis, calibrationX = 1, calibrationY = 1, min_size = 10000, sigma = 1, show_after = 1, scales = 10, maxsize = 10000, dostats = False):
 
 
